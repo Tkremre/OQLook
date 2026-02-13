@@ -107,6 +107,21 @@ body {
   background-attachment: fixed;
 }
 
+#nprogress .bar {
+  background: var(--accent) !important;
+  height: 3px !important;
+}
+
+#nprogress .peg {
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--accent) 75%, transparent),
+    0 0 5px color-mix(in srgb, var(--accent) 75%, transparent) !important;
+}
+
+#nprogress .spinner {
+  display: none !important;
+}
+
 html {
   scrollbar-gutter: stable;
 }

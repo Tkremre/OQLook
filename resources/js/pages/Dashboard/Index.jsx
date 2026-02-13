@@ -158,13 +158,13 @@ export default function DashboardIndex({
       active: true,
       elapsedSeconds: 0,
     });
-    setShowScanLogs(true);
+    setShowScanLogs(false);
     setScanLogState({
-      loading: true,
+      loading: false,
       error: null,
       lines: [],
       scanId: null,
-      running: true,
+      running: false,
       updatedAt: null,
     });
 

@@ -1,4 +1,4 @@
-﻿FROM node:24-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY vite.config.js ./
 COPY public ./public
 RUN npm run build
 
-FROM composer:2.8 AS vendor
+FROM composer:2.9 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock* ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress

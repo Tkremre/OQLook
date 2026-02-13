@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  X,
 } from 'lucide-react';
 
 const ADMIN_PACK_CODES = new Set([
@@ -92,6 +93,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
   const [quickView, setQuickView] = useState('all');
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [showAcknowledgementsModal, setShowAcknowledgementsModal] = useState(false);
 
   const summary = scan?.summary_json ?? {};
   const scanStatus = summary?.status ?? 'ok';
@@ -475,6 +477,17 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Minimum affecté</label>
                 <Input value={minAffected} onChange={(e) => setMinAffected(e.target.value)} placeholder="0" />
               </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex w-full items-center justify-center gap-2"
+                  onClick={() => setShowAcknowledgementsModal(true)}
+                >
+                  <CircleCheckBig className="h-4 w-4" />
+                  Acquittements actifs ({acknowledgements.length})
+                </Button>
+              </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
                 <p>Visibles : <span className="font-semibold">{filteredStats.count}</span> / {issues.length}</p>
                 <p>Total affecté : <span className="font-semibold">{filteredStats.affected}</span></p>
@@ -484,8 +497,8 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
           </Card>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-4 xl:items-start">
-          <Card className="oq-appear xl:col-span-3 overflow-hidden xl:sticky xl:top-24 xl:z-20">
+        <div className="grid gap-5">
+          <Card className="oq-appear overflow-hidden">
             <CardTitle className="inline-flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-amber-600" />
               Anomalies ({filtered.length})
@@ -693,13 +706,38 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
             ) : null}
           </Card>
 
-          <Card className="oq-appear h-fit xl:col-span-1 xl:sticky xl:top-24 xl:z-20">
+        </div>
+      </div>
+
+      {showAcknowledgementsModal ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Acquittements actifs"
+          onClick={() => setShowAcknowledgementsModal(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              onClick={() => setShowAcknowledgementsModal(false)}
+              aria-label="Fermer"
+              title="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
             <CardTitle className="inline-flex items-center gap-2">
               <CircleCheckBig className="h-5 w-5 text-teal-700" />
               Acquittements actifs ({acknowledgements.length})
             </CardTitle>
             <CardDescription>Portée : connexion {scan?.connection?.name ?? 'N/D'}</CardDescription>
-            <div className="mt-3 oq-table-wrap oq-table-wrap--ack">
+
+            <div className="mt-3 oq-table-wrap oq-table-wrap--ack max-h-[65vh]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -732,9 +770,9 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </div>
-      </div>
+      ) : null}
     </AppLayout>
   );
 }

@@ -1,4 +1,4 @@
-﻿FROM node:24-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -12,7 +12,7 @@ WORKDIR /app
 COPY composer.json composer.lock* ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress
 
-FROM php:8.3-cli-alpine
+FROM php:8.5-cli-alpine
 WORKDIR /var/www
 
 RUN apk add --no-cache icu-dev libzip-dev postgresql-dev oniguruma-dev bash \

@@ -1,0 +1,20 @@
+[Unit]
+Description=OQLook Queue Worker
+After=network.target
+
+[Service]
+Type=simple
+User=__WEB_USER__
+Group=__WEB_GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=APP_ENV=production
+ExecStart=__PHP_BIN__ artisan queue:work --queue=default --tries=1 --sleep=3 --timeout=0 --memory=512 --max-time=3600
+ExecReload=__PHP_BIN__ artisan queue:restart
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+

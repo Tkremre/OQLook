@@ -1,0 +1,11 @@
+__APP_DIR__/storage/logs/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 __WEB_USER__ __WEB_GROUP__
+}
+

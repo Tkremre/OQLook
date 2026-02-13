@@ -1,0 +1,12 @@
+[Unit]
+Description=OQLook Scan Watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+User=__WEB_USER__
+Group=__WEB_GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=APP_ENV=production
+ExecStart=__PHP_BIN__ artisan oqlike:watchdog --limit=100
+

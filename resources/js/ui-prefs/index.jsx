@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 
 const STORAGE_KEY = 'oqlike.ui_prefs';
 
-const THEMES = ['oqlook', 'slate', 'sand', 'dark'];
+const THEMES = ['oqlook', 'slate', 'sand', 'volcano', 'ocean', 'dark', 'midnight', 'graphite'];
 const LAYOUTS = ['full', 'boxed'];
 const DENSITIES = ['comfortable', 'compact'];
 
@@ -10,6 +10,7 @@ const DEFAULT_PREFS = {
   theme: 'oqlook',
   layout: 'full',
   density: 'comfortable',
+  sidebarCollapsed: false,
 };
 
 const UiPrefsContext = createContext({
@@ -17,6 +18,8 @@ const UiPrefsContext = createContext({
   setTheme: () => {},
   setLayout: () => {},
   setDensity: () => {},
+  setSidebarCollapsed: () => {},
+  toggleSidebarCollapsed: () => {},
 });
 
 function normalizePrefs(rawPrefs) {
@@ -26,6 +29,7 @@ function normalizePrefs(rawPrefs) {
     theme: THEMES.includes(candidate.theme) ? candidate.theme : DEFAULT_PREFS.theme,
     layout: LAYOUTS.includes(candidate.layout) ? candidate.layout : DEFAULT_PREFS.layout,
     density: DENSITIES.includes(candidate.density) ? candidate.density : DEFAULT_PREFS.density,
+    sidebarCollapsed: Boolean(candidate.sidebarCollapsed),
   };
 }
 
@@ -59,6 +63,7 @@ export function UiPrefsProvider({ children }) {
       document.documentElement.setAttribute('data-oq-theme', prefs.theme);
       document.documentElement.setAttribute('data-oq-layout', prefs.layout);
       document.documentElement.setAttribute('data-oq-density', prefs.density);
+      document.documentElement.setAttribute('data-oq-sidebar', prefs.sidebarCollapsed ? 'collapsed' : 'expanded');
     }
   }, [prefs]);
 
@@ -80,6 +85,18 @@ export function UiPrefsProvider({ children }) {
       setPrefs((previous) => ({
         ...previous,
         density: DENSITIES.includes(density) ? density : previous.density,
+      }));
+    },
+    setSidebarCollapsed: (sidebarCollapsed) => {
+      setPrefs((previous) => ({
+        ...previous,
+        sidebarCollapsed: Boolean(sidebarCollapsed),
+      }));
+    },
+    toggleSidebarCollapsed: () => {
+      setPrefs((previous) => ({
+        ...previous,
+        sidebarCollapsed: !previous.sidebarCollapsed,
       }));
     },
   }), [prefs]);

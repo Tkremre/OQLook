@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { Card, CardDescription, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -8,7 +8,6 @@ import { Link, router } from '@inertiajs/react';
 import { appPath } from '../../lib/app-path';
 import { useI18n } from '../../i18n';
 import {
-  ArrowUpRight,
   CircleCheckBig,
   CircleMinus,
   CircleOff,
@@ -92,6 +91,8 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
   const [sortBy, setSortBy] = useState('affected_desc');
   const [search, setSearch] = useState('');
   const [quickView, setQuickView] = useState('all');
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
 
   const summary = scan?.summary_json ?? {};
   const scanStatus = summary?.status ?? 'ok';
@@ -214,6 +215,29 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
     return totals;
   }, [filtered]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [quickView, domainFilter, severityFilter, classFilter, minAffected, onlyWithSamples, sortBy, search, rowsPerPage]);
+
+  const pagination = useMemo(() => {
+    const totalItems = filtered.length;
+    const safeRowsPerPage = Math.max(10, Number(rowsPerPage) || 100);
+    const totalPages = Math.max(1, Math.ceil(totalItems / safeRowsPerPage));
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+    const start = (currentPage - 1) * safeRowsPerPage;
+    const end = start + safeRowsPerPage;
+    const items = filtered.slice(start, end);
+
+    return {
+      totalItems,
+      totalPages,
+      currentPage,
+      from: totalItems === 0 ? 0 : start + 1,
+      to: totalItems === 0 ? 0 : Math.min(end, totalItems),
+      items,
+    };
+  }, [filtered, page, rowsPerPage]);
+
   const acknowledgeIssue = (issueId) => {
     router.post(appPath(`issues/${issueId}/acknowledge`), {}, { preserveScroll: true });
   };
@@ -254,6 +278,8 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
     setOnlyWithSamples(false);
     setSortBy('affected_desc');
     setSearch('');
+    setRowsPerPage(100);
+    setPage(1);
   };
 
   return (
@@ -479,6 +505,49 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
               Anomalies ({filtered.length})
             </CardTitle>
             <CardDescription>Vue opérationnelle, triable et filtrable</CardDescription>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              <p>
+                Affichage <span className="font-semibold">{pagination.from}</span>-<span className="font-semibold">{pagination.to}</span> sur{' '}
+                <span className="font-semibold">{pagination.totalItems}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs font-semibold text-slate-600" htmlFor="issuesRowsPerPage">
+                  Lignes/page
+                </label>
+                <Select
+                  id="issuesRowsPerPage"
+                  value={String(rowsPerPage)}
+                  onChange={(e) => setRowsPerPage(Number(e.target.value) || 100)}
+                  className="h-10 min-w-[92px] sm:h-8"
+                >
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-3 text-xs sm:h-8"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={pagination.currentPage <= 1}
+                >
+                  Précédent
+                </Button>
+                <span className="min-w-[96px] text-center text-xs font-semibold text-slate-700">
+                  Page {pagination.currentPage}/{pagination.totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-3 text-xs sm:h-8"
+                  onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={pagination.currentPage >= pagination.totalPages}
+                >
+                  Suivant
+                </Button>
+              </div>
+            </div>
             {quickView !== 'all' ? (
               <div className="mt-2">
                 <Badge tone="info">
@@ -486,7 +555,59 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 </Badge>
               </div>
             ) : null}
-            <div className="mt-3 oq-table-wrap oq-table-wrap--issues">
+            <div className="mt-3 space-y-2 md:hidden">
+              {filtered.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                  Aucune anomalie ne correspond aux filtres.
+                </div>
+              ) : pagination.items.map((issue) => (
+                <article key={issue.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{issue.code}</p>
+                    <Badge tone={toneFromSeverity(issue.severity)}>{severityLabel(issue.severity)}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{issue.title}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
+                    <p>Domaine: <span className="font-semibold text-slate-800">{issue.domain || 'N/D'}</span></p>
+                    <p>Classe: <span className="font-semibold text-slate-800">{resolveIssueClass(issue)}</span></p>
+                    <p>Impact: <span className="font-semibold text-slate-800">{issue.impact ?? 0}</span></p>
+                    <p>Affecté: <span className="font-semibold text-slate-800">{issue.affected_count ?? 0}</span></p>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">{issue.recommendation ? issue.recommendation : 'N/D'}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                    <Link href={appPath(`issue/${issue.id}`)} className="inline-flex items-center gap-1 text-teal-700 hover:underline">
+                      <Eye className="h-3.5 w-3.5" />
+                      Détail
+                    </Link>
+                    {issue?.meta_json?.class ? (
+                      <>
+                        {acknowledgedMap[`${issue.meta_json.class}|${issue.code}`] ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-rose-700 hover:underline"
+                            onClick={() => deacknowledgeIssue(issue.id)}
+                          >
+                            <CircleMinus className="h-3.5 w-3.5" />
+                            Désacquitter
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-amber-700 hover:underline"
+                            onClick={() => acknowledgeIssue(issue.id)}
+                          >
+                            <CircleCheckBig className="h-3.5 w-3.5" />
+                            Acquitter
+                          </button>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-3 hidden md:block oq-table-wrap oq-table-wrap--issues">
               <table className="min-w-[1380px] w-full text-sm leading-relaxed">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -509,7 +630,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                         Aucune anomalie ne correspond aux filtres.
                       </td>
                     </tr>
-                  ) : filtered.map((issue) => (
+                  ) : pagination.items.map((issue) => (
                     <tr key={issue.id} className="border-b border-slate-100 align-top">
                       <td className="oq-col-sticky-left px-3 py-3 text-xs font-semibold text-slate-700">
                         <div className="flex flex-wrap items-center gap-1">
@@ -530,7 +651,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                           <Link href={appPath(`issue/${issue.id}`)} className="inline-flex items-center gap-1 text-teal-700 hover:underline">
                             <Eye className="h-3.5 w-3.5" />
                             Détail
-                            <ArrowUpRight className="h-3.5 w-3.5" />
                           </Link>
                           {issue?.meta_json?.class ? (
                             <>
@@ -541,7 +661,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                                   onClick={() => deacknowledgeIssue(issue.id)}
                                 >
                                   <CircleMinus className="h-3.5 w-3.5" />
-                                  désacquitter
+                                  Désacquitter
                                 </button>
                               ) : (
                                 <button
@@ -550,7 +670,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                                   onClick={() => acknowledgeIssue(issue.id)}
                                 >
                                   <CircleCheckBig className="h-3.5 w-3.5" />
-                                  acquitter
+                                  Acquitter
                                 </button>
                               )}
                             </>
@@ -562,6 +682,31 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 </tbody>
               </table>
             </div>
+            {pagination.totalPages > 1 ? (
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-3 text-xs sm:h-8"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={pagination.currentPage <= 1}
+                >
+                  Précédent
+                </Button>
+                <span className="min-w-[96px] text-center text-xs font-semibold text-slate-700">
+                  Page {pagination.currentPage}/{pagination.totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-3 text-xs sm:h-8"
+                  onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={pagination.currentPage >= pagination.totalPages}
+                >
+                  Suivant
+                </Button>
+              </div>
+            ) : null}
           </Card>
 
           <Card className="oq-appear h-fit xl:col-span-1 xl:sticky xl:top-24 xl:z-20">
@@ -595,7 +740,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                           onClick={() => deacknowledgeRule(ack.id)}
                         >
                           <CircleOff className="h-3.5 w-3.5" />
-                          désacquitter
+                          Désacquitter
                         </button>
                       </td>
                     </tr>
@@ -609,3 +754,5 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
     </AppLayout>
   );
 }
+
+

@@ -68,7 +68,7 @@ class IssueController extends Controller
                     ])
                     ->all();
             } catch (\Throwable $exception) {
-                Log::warning('Impossible de charger les acquittements d’anomalies dans l’index des issues.', [
+                Log::warning('Impossible de charger les acquittements d\'anomalies dans l\'index des issues.', [
                     'scan_id' => $scan->id,
                     'error' => $exception->getMessage(),
                 ]);
@@ -91,13 +91,13 @@ class IssueController extends Controller
     public function show(Issue $issue): Response
     {
         return Inertia::render('Issues/Show', [
-            'issue' => $issue->load(['samples', 'scan.connection']),
+            'issue' => $issue->load(['scan.connection', 'samples']),
         ]);
     }
 
     public function impactedObjects(Issue $issue): JsonResponse
     {
-        $issue->loadMissing(['scan.connection', 'samples']);
+        $issue->loadMissing(['scan.connection']);
         $connection = $issue->scan?->connection;
 
         if ($connection === null) {
@@ -110,10 +110,7 @@ class IssueController extends Controller
         }
 
         $issueClass = $this->resolveIssueClass($issue);
-        $maxRecords = max(
-            1,
-            (int) config('oqlike.issue_objects_max_fetch', config('oqlike.max_full_records_without_delta', 4000))
-        );
+        $maxRecords = $this->resolveMaxRecords($issue);
 
         $objects = collect();
         $source = 'live_itop';
@@ -121,16 +118,8 @@ class IssueController extends Controller
         $usedOql = null;
 
         if ($issueClass === null) {
-            $objects = $issue->samples
-                ->map(fn ($sample) => [
-                    'itop_class' => (string) $sample->itop_class,
-                    'itop_id' => (string) $sample->itop_id,
-                    'name' => (string) ($sample->name ?? ''),
-                    'link' => $sample->link,
-                ])
-                ->values();
+            [$objects, $warning] = $this->fallbackToStoredSamples($issue, 'Classe absente pour cette anomalie: fallback sur les échantillons stockés.');
             $source = 'stored_samples';
-            $warning = 'Classe absente pour cette anomalie: fallback sur les échantillons stockés.';
         } else {
             $usedOql = trim((string) ($issue->suggested_oql ?? ''));
 
@@ -140,50 +129,23 @@ class IssueController extends Controller
 
             try {
                 $client = new ItopClient($connection);
-                $fetched = $client->fetchObjects(
-                    $issueClass,
-                    $usedOql,
-                    ['id', 'friendlyname', 'name', 'finalclass'],
-                    $maxRecords
+                $objects = $this->fetchLiveObjects($client, $issueClass, $usedOql, $maxRecords);
+            } catch (\Throwable $exception) {
+                Log::warning('Impossible de charger les objets impactés depuis iTop, fallback sur les échantillons.', [
+                    'issue_id' => $issue->id,
+                    'connection_id' => $connection->id,
+                    'issue_code' => $issue->code,
+                    'class' => $issueClass,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                [$objects, $fallbackWarning] = $this->fallbackToStoredSamples(
+                    $issue,
+                    sprintf('Chargement iTop indisponible: %s', $this->shortError($exception->getMessage()))
                 );
 
-                $objects = collect($fetched)
-                    ->map(function (array $object) use ($client, $issueClass): array {
-                        $itopClass = (string) (Arr::get($object, 'class') ?: $issueClass);
-                        $itopId = (string) Arr::get($object, 'id', Arr::get($object, 'fields.id', ''));
-                        $name = (string) (
-                            Arr::get($object, 'friendlyname')
-                            ?? Arr::get($object, 'fields.friendlyname')
-                            ?? Arr::get($object, 'fields.name')
-                            ?? sprintf('%s#%s', $itopClass, $itopId)
-                        );
-
-                        return [
-                            'itop_class' => $itopClass,
-                            'itop_id' => $itopId,
-                            'name' => $name,
-                            'link' => $itopId !== '' ? $client->itopObjectUrl($itopClass, $itopId) : null,
-                        ];
-                    })
-                    ->filter(fn (array $object): bool => $object['itop_class'] !== '' && $object['itop_id'] !== '')
-                    ->unique(fn (array $object): string => $object['itop_class'].'|'.$object['itop_id'])
-                    ->sort(fn (array $a, array $b): int => (
-                        strcmp($a['itop_class'], $b['itop_class'])
-                        ?: strcmp($a['name'], $b['name'])
-                        ?: strcmp($a['itop_id'], $b['itop_id'])
-                    ))
-                    ->values();
-            } catch (\Throwable $exception) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => sprintf('Impossible de charger les objets impactés: %s', $exception->getMessage()),
-                    'objects' => [],
-                    'acknowledged_map' => [],
-                    'source' => 'live_itop_error',
-                    'issue_code' => (string) $issue->code,
-                    'class' => $issueClass,
-                    'used_oql' => $usedOql,
-                ], 500);
+                $source = 'stored_samples';
+                $warning = $fallbackWarning;
             }
         }
 
@@ -205,14 +167,134 @@ class IssueController extends Controller
             'objects' => $objects,
             'acknowledged_map' => $acknowledgedMap,
             'count' => $objects->count(),
-            'max_records' => $maxRecords,
-            'capped' => $objects->count() >= $maxRecords,
+            'max_records' => 0,
+            'capped' => false,
             'source' => $source,
             'warning' => $warning,
             'issue_code' => (string) $issue->code,
             'class' => $issueClass,
             'used_oql' => $usedOql,
         ]);
+    }
+
+    private function fetchLiveObjects(ItopClient $client, string $issueClass, string $usedOql, int $maxRecords)
+    {
+        $fieldSets = [
+            ['id', 'friendlyname', 'finalclass'],
+            ['id', 'finalclass'],
+            ['id'],
+        ];
+
+        $lastException = null;
+        $fetched = [];
+
+        foreach ($fieldSets as $index => $fields) {
+            try {
+                $fetched = $client->fetchObjects($issueClass, $usedOql, $fields, $maxRecords);
+                $lastException = null;
+                break;
+            } catch (\Throwable $exception) {
+                $lastException = $exception;
+                $isLastFieldSet = $index === array_key_last($fieldSets);
+
+                if ($isLastFieldSet || ! $this->isOutputFieldError($exception->getMessage())) {
+                    break;
+                }
+            }
+        }
+
+        if ($lastException !== null) {
+            throw $lastException;
+        }
+
+        return collect($fetched)
+            ->map(function (array $object) use ($client, $issueClass): array {
+                $itopClass = (string) (Arr::get($object, 'class') ?: $issueClass);
+                $itopId = (string) Arr::get($object, 'id', Arr::get($object, 'fields.id', ''));
+                $name = (string) (
+                    Arr::get($object, 'friendlyname')
+                    ?? Arr::get($object, 'fields.friendlyname')
+                    ?? Arr::get($object, 'fields.name')
+                    ?? sprintf('%s#%s', $itopClass, $itopId)
+                );
+
+                return [
+                    'itop_class' => $itopClass,
+                    'itop_id' => $itopId,
+                    'name' => $name,
+                    'link' => $itopId !== '' ? $client->itopObjectUrl($itopClass, $itopId) : null,
+                ];
+            })
+            ->filter(fn (array $object): bool => $object['itop_class'] !== '' && $object['itop_id'] !== '')
+            ->unique(fn (array $object): string => $object['itop_class'].'|'.$object['itop_id'])
+            ->sort(fn (array $a, array $b): int => (
+                strcmp($a['itop_class'], $b['itop_class'])
+                ?: strcmp($a['name'], $b['name'])
+                ?: strcmp($a['itop_id'], $b['itop_id'])
+            ))
+            ->values();
+    }
+
+    private function fallbackToStoredSamples(Issue $issue, ?string $contextWarning = null): array
+    {
+        $objects = $issue->samples()
+            ->orderBy('id')
+            ->get(['itop_class', 'itop_id', 'name', 'link'])
+            ->map(fn ($sample) => [
+                'itop_class' => (string) $sample->itop_class,
+                'itop_id' => (string) $sample->itop_id,
+                'name' => (string) ($sample->name ?? ''),
+                'link' => $sample->link,
+            ])
+            ->filter(fn (array $sample): bool => $sample['itop_class'] !== '' && $sample['itop_id'] !== '')
+            ->unique(fn (array $sample): string => $sample['itop_class'].'|'.$sample['itop_id'])
+            ->values();
+
+        if ($objects->isEmpty()) {
+            $warning = trim(($contextWarning ? $contextWarning.' ' : '').'Aucun échantillon stocké disponible pour cette anomalie.');
+            return [collect(), $warning];
+        }
+
+        $warning = trim(($contextWarning ? $contextWarning.' ' : '').'Affichage des échantillons stockés.');
+        return [$objects, $warning];
+    }
+
+    private function resolveMaxRecords(Issue $issue): int
+    {
+        $configuredCap = (int) config('oqlike.issue_objects_max_fetch', 0);
+        $affectedCount = max(0, (int) $issue->affected_count);
+
+        if ($affectedCount > 0) {
+            return max($configuredCap, $affectedCount);
+        }
+
+        if ($configuredCap > 0) {
+            return $configuredCap;
+        }
+
+        return PHP_INT_MAX;
+    }
+
+    private function shortError(string $message): string
+    {
+        $normalized = trim($message);
+
+        if ($normalized === '') {
+            return 'Erreur iTop non détaillée';
+        }
+
+        if (mb_strlen($normalized) <= 220) {
+            return $normalized;
+        }
+
+        return mb_substr($normalized, 0, 217).'...';
+    }
+
+    private function isOutputFieldError(string $message): bool
+    {
+        $lower = mb_strtolower($message);
+
+        return str_contains($lower, 'output_fields') || str_contains($lower, 'invalid attribute code');
     }
 
     private function resolveIssueClass(Issue $issue): ?string
@@ -223,7 +305,9 @@ class IssueController extends Controller
             return $className;
         }
 
-        $sampleClass = $issue->samples->first()?->itop_class;
+        $sampleClass = $issue->relationLoaded('samples')
+            ? $issue->samples->first()?->itop_class
+            : $issue->samples()->value('itop_class');
 
         if (is_string($sampleClass) && $sampleClass !== '') {
             return $sampleClass;

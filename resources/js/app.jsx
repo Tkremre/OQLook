@@ -11,7 +11,12 @@ import { UiPrefsProvider } from './ui-prefs';
 const appName = import.meta.env.VITE_APP_NAME || 'OQLook';
 
 createInertiaApp({
-  title: (title) => `${title} - ${appName}`,
+  title: (title) => {
+    const normalized = String(title ?? '').trim();
+    if (!normalized) return appName;
+    if (normalized === appName || normalized.endsWith(` - ${appName}`)) return normalized;
+    return `${normalized} - ${appName}`;
+  },
   resolve: (name) =>
     resolvePageComponent(`./pages/${name}.jsx`, import.meta.glob('./pages/**/*.jsx')),
   setup({ el, App, props }) {

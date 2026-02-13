@@ -57,6 +57,20 @@
         .badge-warn { background: #fef3c7; color: #b45309; border-color: #fde68a; }
         .badge-info { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
         .page-break { page-break-before: always; }
+        .brand-header { margin-bottom: 8px; }
+        .brand-logo {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        .brand-title {
+            display: inline-block;
+            vertical-align: middle;
+            font-size: 20px;
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -88,7 +102,16 @@
         };
     @endphp
 
-    <h1>OQLook - Rapport de santé CMDB</h1>
+    <div class="brand-header">
+        <span class="brand-logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OQLook">
+                <rect x="4" y="4" width="56" height="56" rx="16" fill="#0f766e" />
+                <path d="M32 14 46 19v11c0 8.8-5.6 16.7-14 19.7C23.6 46.7 18 38.8 18 30V19l14-5Z" fill="none" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" />
+                <path d="m25 31 5 5 9-10" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </span>
+        <span class="brand-title">OQLook - Rapport de santé CMDB</span>
+    </div>
     <p class="muted">
         Scan #{{ $scan->id }} |
         Connexion: {{ $scan->connection->name ?? 'N/D' }} |

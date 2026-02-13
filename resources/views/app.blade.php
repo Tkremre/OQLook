@@ -11,6 +11,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ config('app.name', 'OQLook') }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ ($appPath ?: '') . '/favicon.svg' }}">
+    <link rel="icon" type="image/svg+xml" href="{{ ($appPath ?: '') . '/brand/oqlook-mark.svg' }}">
+    <link rel="shortcut icon" href="{{ ($appPath ?: '') . '/favicon.svg' }}">
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     <script>window.OQLOOK_BASE_PATH = @json($appPath);</script>
     @inertiaHead

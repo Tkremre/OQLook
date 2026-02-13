@@ -1,46 +1,84 @@
-# OQLook
+﻿<p align="center">
+  <img src="docs/assets/oqlook-mark.svg" alt="OQLook" width="84" />
+</p>
 
-EN: OQLook is a self-hosted Laravel application that audits iTop CMDB data quality (adaptive checks, scoring, issues, drilldown, exports).  
-FR: OQLook est une application Laravel auto-hébergée pour auditer la qualité des données iTop CMDB (contrôles adaptatifs, score, anomalies, drilldown, exports).
+<h1 align="center">OQLook</h1>
 
-## EN - Quick Start
+<p align="center">
+  EN: Adaptive CMDB quality scanner for iTop (self-hosted).<br/>
+  FR: Scanner adaptatif de qualité CMDB pour iTop (auto-hébergé).
+</p>
 
-### 1) Requirements
+---
 
-- PHP 8.2+ with required extensions (`curl`, `mbstring`, `intl`, `pdo_pgsql` or `pdo_mysql`, `zip`, `gd`, `ldap` if needed)
-- Composer 2+
-- Node.js 20+ (LTS recommended)
+## Table of Contents / Sommaire
+
+- [Overview / Présentation](#overview--présentation)
+- [Features / Fonctionnalités](#features--fonctionnalités)
+- [Quick Start (Linux/Windows)](#quick-start-linuxwindows)
+- [Manual Installation / Installation manuelle](#manual-installation--installation-manuelle)
+- [Configuration](#configuration)
+- [Operations / Exploitation](#operations--exploitation)
+- [Troubleshooting / Dépannage](#troubleshooting--dépannage)
+- [Documentation](#documentation)
+
+## Overview / Présentation
+
+OQLook audits iTop CMDB data quality with adaptive checks, scoring, issue tracking, drilldown and exports.
+
+OQLook audite la qualité des données iTop CMDB avec des contrôles adaptatifs, un scoring, le suivi des anomalies, le drilldown et des exports.
+
+## Features / Fonctionnalités
+
+- Multi-domain scoring: `completeness`, `consistency`, `relations`, `obsolescence`, `hygiene`.
+- Full and delta scans.
+- Rule-level and object-level acknowledgements.
+- Drilldown list of impacted objects with filters/sorting.
+- PDF export of scan context, KPIs and issue details.
+- iTop metamodel discovery via REST and optional connector.
+- UI preferences: language, theme, density, layout.
+
+## Quick Start (Linux/Windows)
+
+### Generic prerequisites
+
+- PHP `8.2+` with required extensions (`curl`, `mbstring`, `intl`, `pdo_pgsql` or `pdo_mysql`, `zip`, `gd`; `ldap` optional)
+- Composer `2+`
+- Node.js `20+` (LTS recommended)
 - PostgreSQL or MySQL/MariaDB
-- Redis (optional, recommended for queue)
 - Web server (Nginx or Apache) pointing to `public/`
+- Redis optional (recommended for queue)
 
-### 2) Automatic setup scripts
+### Install scripts
 
-- Linux: `scripts/install/linux/bootstrap.sh`
-- Windows: `scripts/install/windows/bootstrap.ps1`
-- Linux production hardening: `scripts/install/linux/hardening.sh`
-- Windows production hardening: `scripts/install/windows/production-hardening.ps1`
-- Script docs: `scripts/install/README.md`
+| OS | Bootstrap script | Production hardening |
+|---|---|---|
+| Linux | `scripts/install/linux/bootstrap.sh` | `scripts/install/linux/hardening.sh` |
+| Windows | `scripts/install/windows/bootstrap.ps1` | `scripts/install/windows/production-hardening.ps1` |
 
-Install directly from GitHub:
+Clone:
 
 ```bash
 git clone https://github.com/<org>/OQLook.git
 cd OQLook
 ```
 
-Examples:
+Linux example:
 
 ```bash
 chmod +x scripts/install/linux/bootstrap.sh
 ./scripts/install/linux/bootstrap.sh --install-deps
 ```
 
+Windows example:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install\windows\bootstrap.ps1 -InstallDeps -InstallPostgres
 ```
 
-### 3) Manual setup
+Script reference: `scripts/install/README.md`
+
+## Manual Installation / Installation manuelle
 
 ```bash
 cp .env.example .env
@@ -52,9 +90,9 @@ php artisan migrate --force
 php artisan optimize:clear
 ```
 
-### 4) Configure `.env`
+## Configuration
 
-Minimum:
+Minimum `.env`:
 
 ```env
 APP_ENV=production
@@ -70,194 +108,65 @@ DB_USERNAME=oqlook
 DB_PASSWORD=change_me
 ```
 
-If deployed under subpath (example `/oqlook`), set:
+If served from a subpath (example `/oqlook`):
 
 ```env
 APP_URL=https://mydomain/oqlook
 ASSET_URL=https://mydomain/oqlook
 ```
 
-Then rebuild frontend and clear cache:
+Then:
 
 ```bash
 npm run build
 php artisan optimize:clear
 ```
 
-### 5) Queue worker (recommended in production)
+### Key OQLike tuning variables
 
-```bash
-php artisan queue:work --queue=default --tries=1
-```
-
-### 6) Useful commands
-
-- Run class discovery only:
-
-```bash
-php artisan oqlike:discover <connection_id>
-```
-
-- Run a scan from CLI:
-
-```bash
-php artisan oqlike:scan <connection_id> --mode=delta
-php artisan oqlike:scan <connection_id> --mode=full --classes=Server,Person
-```
-
-## FR - Démarrage Rapide
-
-### 1) Prérequis
-
-- PHP 8.2+ avec extensions requises (`curl`, `mbstring`, `intl`, `pdo_pgsql` ou `pdo_mysql`, `zip`, `gd`, `ldap` si nécessaire)
-- Composer 2+
-- Node.js 20+ (LTS recommandé)
-- PostgreSQL ou MySQL/MariaDB
-- Redis (optionnel, recommandé pour la queue)
-- Serveur web (Nginx ou Apache) pointant vers `public/`
-
-### 2) Scripts d'installation automatiques
-
-- Linux : `scripts/install/linux/bootstrap.sh`
-- Windows : `scripts/install/windows/bootstrap.ps1`
-- Hardening prod Linux : `scripts/install/linux/hardening.sh`
-- Hardening prod Windows : `scripts/install/windows/production-hardening.ps1`
-- Documentation : `scripts/install/README.md`
-
-Installer directement depuis GitHub :
-
-```bash
-git clone https://github.com/<org>/OQLook.git
-cd OQLook
-```
-
-Exemples :
-
-```bash
-chmod +x scripts/install/linux/bootstrap.sh
-./scripts/install/linux/bootstrap.sh --install-deps
-```
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install\windows\bootstrap.ps1 -InstallDeps -InstallPostgres
-```
-
-### 3) Installation manuelle
-
-```bash
-cp .env.example .env
-composer install --no-interaction --prefer-dist
-npm install
-npm run build
-php artisan key:generate --force
-php artisan migrate --force
-php artisan optimize:clear
-```
-
-### 4) Configuration `.env`
-
-Minimum :
-
-```env
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://votre-hote-ou-sous-chemin
-ASSET_URL=https://votre-hote-ou-sous-chemin
-
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=oqlook
-DB_USERNAME=oqlook
-DB_PASSWORD=change_me
-```
-
-Si l'application est servie dans un sous-chemin (ex: `/oqlook`) :
-
-```env
-APP_URL=https://mondomaine/oqlook
-ASSET_URL=https://mondomaine/oqlook
-```
-
-Puis :
-
-```bash
-npm run build
-php artisan optimize:clear
-```
-
-### 5) Worker queue (recommandé en production)
-
-```bash
-php artisan queue:work --queue=default --tries=1
-```
-
-### 6) Commandes utiles
-
-- Découverte des classes uniquement :
-
-```bash
-php artisan oqlike:discover <connection_id>
-```
-
-- Scan en ligne de commande :
-
-```bash
-php artisan oqlike:scan <connection_id> --mode=delta
-php artisan oqlike:scan <connection_id> --mode=full --classes=Server,Person
-```
-
-## Docker
-
-For containerized setup, see:
-- `docs/INSTALL_DOCKER.md`
-
-## Advanced OQLike Settings
-
-Key options in `.env` / `config/oqlike.php`:
-
-- Scan behavior:
+- Scan limits:
   - `OQLIKE_MAX_FULL_RECORDS_PER_CLASS`
   - `OQLIKE_MAX_FULL_RECORDS_WITHOUT_DELTA`
   - `OQLIKE_DELTA_STRICT_MODE`
   - `OQLIKE_MAX_DUPLICATE_SCAN_RECORDS`
-- Connector/metamodel memory guards:
+- Metamodel/connector:
   - `OQLIKE_MAX_CONNECTOR_CLASSES`
   - `OQLIKE_CONNECTOR_MEMORY_GUARD_RATIO`
   - `OQLIKE_CONNECTOR_MEMORY_HARD_STOP_RATIO`
-- Admin pack:
-  - `OQLIKE_ADMIN_PACK_ENABLED`
-  - `OQLIKE_ADMIN_PACK_*`
+  - `OQLIKE_DISCOVERY_SCAN_LIMIT`
 - Object acknowledgements:
   - `OQLIKE_OBJECT_ACK_ENABLED=true`
   - `OQLIKE_OBJECT_ACK_MAX_VERIFICATIONS_PER_ISSUE=250`
   - `OQLIKE_ISSUE_OBJECTS_MAX_FETCH=5000`
 
-After editing `.env`:
+## Operations / Exploitation
+
+Queue worker (recommended):
 
 ```bash
-php artisan optimize:clear
+php artisan queue:work --queue=default --tries=1
 ```
 
-## Acknowledgements (Rule and Object Level)
-
-OQLook supports:
-
-- Rule/class acknowledgements: skip full checks for `connection + class + issue_code`
-- Object acknowledgements: exclude specific iTop objects from issue counts
-
-Object acknowledgements require the migration:
+Discovery only:
 
 ```bash
-php artisan migrate --force
+php artisan oqlike:discover <connection_id>
 ```
 
-## Common Troubleshooting
+Run scan from CLI:
 
-### `Failed to parse dotenv file. Encountered unexpected whitespace`
+```bash
+php artisan oqlike:scan <connection_id> --mode=delta
+php artisan oqlike:scan <connection_id> --mode=full --classes=Server,Person
+```
 
-Do not use spaces in comma-separated env lists.  
-Example:
+## Troubleshooting / Dépannage
+
+### Dotenv parse error
+
+`Failed to parse dotenv file. Encountered unexpected whitespace`
+
+Do not put spaces in comma-separated values:
 
 ```env
 OQLIKE_ADMIN_PACK_PLACEHOLDER_TERMS=test,tmp,todo,tbd,sample,dummy,unknown,n/a,na,xxx,to_define
@@ -265,28 +174,29 @@ OQLIKE_ADMIN_PACK_PLACEHOLDER_TERMS=test,tmp,todo,tbd,sample,dummy,unknown,n/a,n
 
 ### `Could not open input file: artisan`
 
-Run commands from the project root:
+Run commands from project root:
 
 ```bash
 cd /path/to/OQLook
 php artisan ...
 ```
 
-### `404 /build/assets/...`
+### Missing assets (`/build/assets/...`)
 
-- ensure `APP_URL` and `ASSET_URL` are correct
-- rebuild assets
-- clear cache
+- Check `APP_URL` and `ASSET_URL`
+- Rebuild frontend assets
+- Clear Laravel caches
 
-### Scans are long or appear stuck
+### Scan seems stuck
 
-- check `storage/logs/laravel.log`
-- use lower caps (`OQLIKE_MAX_FULL_RECORDS_PER_CLASS`, `OQLIKE_MAX_DUPLICATE_SCAN_RECORDS`)
-- run queue worker for background scans
+- Inspect `storage/logs/laravel.log`
+- Reduce caps (`OQLIKE_MAX_FULL_RECORDS_PER_CLASS`, `OQLIKE_MAX_DUPLICATE_SCAN_RECORDS`)
+- Use queue worker and watchdog in production
 
-## Additional Docs
+## Documentation
 
 - Classic install: `docs/INSTALL_CLASSIC.md`
 - Docker install: `docs/INSTALL_DOCKER.md`
 - Production hardening: `docs/PRODUCTION_HARDENING.md`
 - Connector deployment: `oqlike-connector/README.md`
+- Install scripts: `scripts/install/README.md`

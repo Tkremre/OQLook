@@ -1,4 +1,4 @@
-export const SUPPORTED_LOCALES = ['fr', 'en'];
+﻿export const SUPPORTED_LOCALES = ['fr', 'en'];
 
 export const TRANSLATIONS = {
   fr: {
@@ -14,7 +14,7 @@ export const TRANSLATIONS = {
     },
     pages: {
       dashboard: {
-        title: 'Vue DSI',
+        title: 'Tableau de bord',
         subtitle: 'Pilotage des scans CMDB, suivi des anomalies et exécution opérationnelle',
       },
       connections: {
@@ -56,14 +56,21 @@ export const TRANSLATIONS = {
       themeLabel: 'Thème',
       layoutLabel: 'Disposition',
       densityLabel: 'Densité',
+      sidebarLabel: 'Barre latérale',
       themeOqlook: 'OQLook (par défaut)',
       themeSlate: 'Ardoise',
       themeSand: 'Sable',
+      themeVolcano: 'Volcan',
+      themeOcean: 'Océan',
       themeDark: 'Nuit',
+      themeMidnight: 'Minuit',
+      themeGraphite: 'Graphite',
       layoutFull: 'Pleine largeur',
       layoutBoxed: 'Centrée (boxed)',
       densityComfortable: 'Confort',
       densityCompact: 'Compacte',
+      sidebarExpanded: 'Déployée',
+      sidebarCollapsed: 'Repliée',
       readmeCardTitle: 'Tutoriel et documentation',
       readmeCardDescription: 'Consultez les README directement depuis l\'application',
       readmeEmpty: 'Aucun README disponible.',
@@ -86,7 +93,7 @@ export const TRANSLATIONS = {
     },
     pages: {
       dashboard: {
-        title: 'Executive View',
+        title: 'Dashboard',
         subtitle: 'CMDB scan control, issue tracking and operational execution',
       },
       connections: {
@@ -128,14 +135,21 @@ export const TRANSLATIONS = {
       themeLabel: 'Theme',
       layoutLabel: 'Layout',
       densityLabel: 'Density',
+      sidebarLabel: 'Sidebar',
       themeOqlook: 'OQLook (default)',
       themeSlate: 'Slate',
       themeSand: 'Sand',
+      themeVolcano: 'Volcano',
+      themeOcean: 'Ocean',
       themeDark: 'Dark',
+      themeMidnight: 'Midnight',
+      themeGraphite: 'Graphite',
       layoutFull: 'Full width',
       layoutBoxed: 'Centered (boxed)',
       densityComfortable: 'Comfortable',
       densityCompact: 'Compact',
+      sidebarExpanded: 'Expanded',
+      sidebarCollapsed: 'Collapsed',
       readmeCardTitle: 'Tutorial and documentation',
       readmeCardDescription: 'Read project README files directly in the app',
       readmeEmpty: 'No README available.',

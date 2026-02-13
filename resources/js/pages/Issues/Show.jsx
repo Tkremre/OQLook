@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '../../layouts/AppLayout';
 import { Card, CardDescription, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -47,14 +47,8 @@ function formatInsightValue(value) {
       .join(' | ');
   }
 
-  if (value === null || value === undefined || value === '') {
-    return 'N/D';
-  }
-
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-
+  if (value === null || value === undefined || value === '') return 'N/D';
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 
@@ -65,7 +59,6 @@ function issueInsights(issue) {
   if (meta.class) rows.push(['Classe', meta.class]);
   if (meta.staleness_field) rows.push(['Champ stale', meta.staleness_field]);
   if (meta.threshold_days) rows.push(['Seuil (jours)', meta.threshold_days]);
-  if (meta.max_records) rows.push(['Cap analyse', meta.max_records]);
   if (meta.owner_fields) rows.push(['Ownership fields', meta.owner_fields]);
   if (meta.classification_fields) rows.push(['Classification fields', meta.classification_fields]);
   if (meta.placeholder_terms) rows.push(['Placeholder terms', meta.placeholder_terms]);
@@ -93,17 +86,34 @@ function objectSort(objects, sortBy) {
   return copy;
 }
 
+function samplesToObjects(samples = []) {
+  if (!Array.isArray(samples)) return [];
+
+  return samples
+    .map((sample) => ({
+      itop_class: String(sample?.itop_class ?? '').trim(),
+      itop_id: String(sample?.itop_id ?? '').trim(),
+      name: String(sample?.name ?? '').trim(),
+      link: sample?.link ?? null,
+    }))
+    .filter((sample) => sample.itop_class !== '' && sample.itop_id !== '')
+    .filter((sample, index, array) => (
+      array.findIndex((candidate) => (
+        candidate.itop_class === sample.itop_class && candidate.itop_id === sample.itop_id
+      )) === index
+    ));
+}
+
 export default function IssueShow({ issue }) {
   const { t } = useI18n();
   const severityTone = issue?.severity === 'crit' ? 'crit' : issue?.severity === 'warn' ? 'warn' : 'info';
   const insights = issueInsights(issue);
+
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [objectsError, setObjectsError] = useState('');
   const [objects, setObjects] = useState([]);
   const [objectsMeta, setObjectsMeta] = useState({
     count: 0,
-    max_records: 0,
-    capped: false,
     source: null,
     warning: null,
   });
@@ -112,6 +122,8 @@ export default function IssueShow({ issue }) {
   const [ackFilter, setAckFilter] = useState('all');
   const [ackMap, setAckMap] = useState({});
   const [busyObjectKey, setBusyObjectKey] = useState(null);
+  const [objectsPage, setObjectsPage] = useState(1);
+  const [objectsRowsPerPage, setObjectsRowsPerPage] = useState(100);
 
   const loadImpactedObjects = async () => {
     setObjectsLoading(true);
@@ -131,22 +143,32 @@ export default function IssueShow({ issue }) {
       setAckMap(payload.acknowledged_map ?? {});
       setObjectsMeta({
         count: Number(payload.count || 0),
-        max_records: Number(payload.max_records || 0),
-        capped: Boolean(payload.capped),
         source: payload.source ?? null,
         warning: payload.warning ?? null,
       });
     } catch (error) {
-      setObjectsError(error?.response?.data?.error || error?.message || 'Chargement des objets impactés impossible.');
-      setObjects([]);
-      setAckMap({});
-      setObjectsMeta({
-        count: 0,
-        max_records: 0,
-        capped: false,
-        source: null,
-        warning: null,
-      });
+      const fallbackObjects = samplesToObjects(issue?.samples ?? []);
+      const fallbackErrorMessage = error?.response?.data?.error || error?.message || 'Chargement des objets impactés impossible.';
+
+      if (fallbackObjects.length > 0) {
+        setObjects(fallbackObjects);
+        setAckMap({});
+        setObjectsMeta({
+          count: fallbackObjects.length,
+          source: 'stored_samples',
+          warning: `Impossible de charger les objets impactés via iTop (${fallbackErrorMessage}). Affichage des échantillons stockés.`,
+        });
+        setObjectsError('');
+      } else {
+        setObjectsError(fallbackErrorMessage);
+        setObjects([]);
+        setAckMap({});
+        setObjectsMeta({
+          count: 0,
+          source: null,
+          warning: null,
+        });
+      }
     } finally {
       setObjectsLoading(false);
     }
@@ -178,6 +200,28 @@ export default function IssueShow({ issue }) {
     () => filteredObjects.filter((obj) => Boolean(ackMap[`${obj.itop_class}|${obj.itop_id}`])).length,
     [filteredObjects, ackMap]
   );
+
+  useEffect(() => {
+    setObjectsPage(1);
+  }, [objectSearch, objectSortBy, ackFilter, objectsRowsPerPage, objects.length]);
+
+  const paginatedObjects = useMemo(() => {
+    const totalItems = filteredObjects.length;
+    const safeRowsPerPage = Math.max(10, Number(objectsRowsPerPage) || 100);
+    const totalPages = Math.max(1, Math.ceil(totalItems / safeRowsPerPage));
+    const currentPage = Math.min(Math.max(1, objectsPage), totalPages);
+    const start = (currentPage - 1) * safeRowsPerPage;
+    const end = start + safeRowsPerPage;
+
+    return {
+      totalItems,
+      totalPages,
+      currentPage,
+      from: totalItems === 0 ? 0 : start + 1,
+      to: totalItems === 0 ? 0 : Math.min(end, totalItems),
+      items: filteredObjects.slice(start, end),
+    };
+  }, [filteredObjects, objectsPage, objectsRowsPerPage]);
 
   const toggleObjectAcknowledgement = async (object) => {
     const key = `${object.itop_class}|${object.itop_id}`;
@@ -226,18 +270,14 @@ export default function IssueShow({ issue }) {
         setAckMap((previous) => ({ ...previous, [key]: true }));
       }
     } catch (error) {
-      setObjectsError(error?.response?.data?.status || error?.response?.data?.error || error?.message || 'Erreur d’acquittement objet.');
+      setObjectsError(error?.response?.data?.status || error?.response?.data?.error || error?.message || 'Erreur d\'acquittement objet.');
     } finally {
       setBusyObjectKey(null);
     }
   };
 
   return (
-    <AppLayout
-      title={t('pages.issueShow.title', { id: issue.id })}
-      subtitle={t('pages.issueShow.subtitle')}
-      fullWidth
-    >
+    <AppLayout title={t('pages.issueShow.title', { id: issue.id })} subtitle={t('pages.issueShow.subtitle')} fullWidth>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="oq-appear">
           <CardTitle className="inline-flex items-center gap-2">
@@ -305,9 +345,7 @@ export default function IssueShow({ issue }) {
               <ListChecks className="h-5 w-5 text-slate-600" />
               Objets impactés ({filteredObjects.length})
             </CardTitle>
-            <CardDescription>
-              Liste complète iTop pour ce contrôle, avec tri/recherche et acquittement objet.
-            </CardDescription>
+            <CardDescription>Liste complète iTop pour ce contrôle, avec tri/recherche et acquittement objet.</CardDescription>
           </div>
           <Button type="button" variant="outline" onClick={loadImpactedObjects} disabled={objectsLoading}>
             <RefreshCw className={`mr-1.5 h-4 w-4 ${objectsLoading ? 'animate-spin' : ''}`} />
@@ -315,17 +353,13 @@ export default function IssueShow({ issue }) {
           </Button>
         </div>
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="xl:col-span-2">
             <label className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600">
               <Search className="h-3.5 w-3.5" />
               Recherche
             </label>
-            <Input
-              value={objectSearch}
-              onChange={(e) => setObjectSearch(e.target.value)}
-              placeholder="classe, id, nom"
-            />
+            <Input value={objectSearch} onChange={(e) => setObjectSearch(e.target.value)} placeholder="classe, id, nom" />
           </div>
           <div>
             <label className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600">
@@ -352,30 +386,78 @@ export default function IssueShow({ issue }) {
               <option value="id_desc">ID décroissant</option>
             </Select>
           </div>
+          <div>
+            <label className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <ListChecks className="h-3.5 w-3.5" />
+              Lignes/page
+            </label>
+            <Select value={String(objectsRowsPerPage)} onChange={(e) => setObjectsRowsPerPage(Number(e.target.value) || 100)}>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="500">500</option>
+            </Select>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
             <p>Visibles: <span className="font-semibold">{filteredObjects.length}</span></p>
             <p>Acquittés visibles: <span className="font-semibold">{acknowledgedCount}</span></p>
             <p>Chargés: <span className="font-semibold">{objectsMeta.count}</span></p>
+            <p>Page: <span className="font-semibold">{paginatedObjects.currentPage}/{paginatedObjects.totalPages}</span></p>
           </div>
         </div>
 
         {objectsMeta.warning ? (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-            {objectsMeta.warning}
-          </div>
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">{objectsMeta.warning}</div>
         ) : null}
 
-        {objectsMeta.capped ? (
+        {objectsMeta.source === 'stored_samples' ? (
           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-            Cap actif: {objectsMeta.max_records} objets max chargés.
+            Mode secours actif: la liste provient des échantillons stockés.
           </div>
         ) : null}
 
         {objectsError ? (
-          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-            {objectsError}
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{objectsError}</div>
+        ) : null}
+
+        {objectsLoading && objects.length === 0 ? (
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            <div className="inline-flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Chargement des objets impactés en cours...
+            </div>
           </div>
         ) : null}
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <p>
+            Affichage <span className="font-semibold">{paginatedObjects.from}</span>-<span className="font-semibold">{paginatedObjects.to}</span> sur{' '}
+            <span className="font-semibold">{paginatedObjects.totalItems}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-3 text-xs sm:h-8"
+              onClick={() => setObjectsPage((prev) => Math.max(1, prev - 1))}
+              disabled={paginatedObjects.currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <span className="min-w-[96px] text-center text-xs font-semibold text-slate-700">
+              Page {paginatedObjects.currentPage}/{paginatedObjects.totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-3 text-xs sm:h-8"
+              onClick={() => setObjectsPage((prev) => Math.min(paginatedObjects.totalPages, prev + 1))}
+              disabled={paginatedObjects.currentPage >= paginatedObjects.totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
 
         <div className="mt-3 oq-table-wrap">
           <table className="min-w-[940px] w-full text-sm">
@@ -392,13 +474,13 @@ export default function IssueShow({ issue }) {
             <tbody>
               {objectsLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-3 text-slate-500">Chargement des objets impactés...</td>
+                  <td colSpan={6} className="py-3 text-slate-500">Actualisation en cours...</td>
                 </tr>
-              ) : filteredObjects.length === 0 ? (
+              ) : paginatedObjects.items.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-3 text-slate-500">Aucun objet correspondant.</td>
                 </tr>
-              ) : filteredObjects.map((object) => {
+              ) : paginatedObjects.items.map((object) => {
                 const key = `${object.itop_class}|${object.itop_id}`;
                 const isAcked = Boolean(ackMap[key]);
                 const isBusy = busyObjectKey === key;
@@ -409,7 +491,7 @@ export default function IssueShow({ issue }) {
                     <td className="py-2">{object.itop_id}</td>
                     <td className="py-2">{object.name || 'N/D'}</td>
                     <td className="py-2">
-                      {isAcked ? <Badge tone="info">acquitté</Badge> : <Badge tone="warn">actif</Badge>}
+                      {isAcked ? <Badge tone="info">Acquitté</Badge> : <Badge tone="warn">Actif</Badge>}
                     </td>
                     <td className="py-2">
                       {object.link ? (
@@ -427,7 +509,7 @@ export default function IssueShow({ issue }) {
                         onClick={() => toggleObjectAcknowledgement(object)}
                       >
                         {isAcked ? <CircleMinus className="h-3.5 w-3.5" /> : <CircleCheckBig className="h-3.5 w-3.5" />}
-                        {isAcked ? 'désacquitter objet' : 'acquitter objet'}
+                        {isAcked ? 'Désacquitter objet' : 'Acquitter objet'}
                       </button>
                     </td>
                   </tr>
@@ -436,51 +518,33 @@ export default function IssueShow({ issue }) {
             </tbody>
           </table>
         </div>
-      </Card>
 
-      <Card className="oq-appear mt-5">
-        <CardTitle className="inline-flex items-center gap-2">
-          <ListChecks className="h-5 w-5 text-slate-600" />
-          Échantillons du scan ({issue.samples?.length ?? 0})
-        </CardTitle>
-        <CardDescription>
-          Échantillons stockés lors du scan (vue de secours/debug).
-        </CardDescription>
-        <div className="mt-3 oq-table-wrap">
-          <table className="min-w-[760px] w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
-                <th className="py-2">Classe</th>
-                <th className="py-2">ID</th>
-                <th className="py-2">Nom</th>
-                <th className="py-2">Lien</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(issue.samples ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-3 text-slate-500">Aucun échantillon stocké.</td>
-                </tr>
-              ) : (issue.samples ?? []).map((sample) => (
-                <tr key={sample.id} className="border-b border-slate-100">
-                  <td className="py-2">{sample.itop_class}</td>
-                  <td className="py-2">{sample.itop_id}</td>
-                  <td className="py-2">{sample.name}</td>
-                  <td className="py-2">
-                    {sample.link ? (
-                      <a href={sample.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-teal-700 hover:underline">
-                        ouvrir iTop
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </a>
-                    ) : 'N/D'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {paginatedObjects.totalPages > 1 ? (
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-3 text-xs sm:h-8"
+              onClick={() => setObjectsPage((prev) => Math.max(1, prev - 1))}
+              disabled={paginatedObjects.currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <span className="min-w-[96px] text-center text-xs font-semibold text-slate-700">
+              Page {paginatedObjects.currentPage}/{paginatedObjects.totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-3 text-xs sm:h-8"
+              onClick={() => setObjectsPage((prev) => Math.min(paginatedObjects.totalPages, prev + 1))}
+              disabled={paginatedObjects.currentPage >= paginatedObjects.totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        ) : null}
       </Card>
     </AppLayout>
   );
 }
-

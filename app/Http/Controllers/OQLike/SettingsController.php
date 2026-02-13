@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\OQLike;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,6 +46,10 @@ class SettingsController extends Controller
                 'title' => (string) ($entry['title'] ?? basename($path)),
                 'relative_path' => str_replace('\\', '/', ltrim(str_replace(base_path(), '', $path), DIRECTORY_SEPARATOR)),
                 'content' => $content,
+                'content_html' => Str::markdown($content, [
+                    'html_input' => 'strip',
+                    'allow_unsafe_links' => false,
+                ]),
                 'updated_at' => date('Y-m-d H:i:s', (int) @filemtime($path)),
                 'size_bytes' => (int) @filesize($path),
             ];
@@ -55,4 +60,3 @@ class SettingsController extends Controller
         ]);
     }
 }
-

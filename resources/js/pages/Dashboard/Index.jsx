@@ -72,6 +72,7 @@ export default function DashboardIndex({
     elapsedSeconds: 0,
   });
   const [showScanLogs, setShowScanLogs] = useState(false);
+  const [showClassSelector, setShowClassSelector] = useState(false);
   const [scanLogState, setScanLogState] = useState({
     loading: false,
     error: null,
@@ -82,7 +83,7 @@ export default function DashboardIndex({
   });
 
   const form = useForm({
-    mode: 'delta',
+    mode: 'full',
     classes: '',
     thresholdDays: 365,
     forceSelectedClasses: false,
@@ -141,6 +142,10 @@ export default function DashboardIndex({
     }
 
     form.setData('classes', Array.from(next).sort().join(','));
+  };
+
+  const clearSelectedClasses = () => {
+    form.setData('classes', '');
   };
 
   const submitScan = (event) => {
@@ -243,6 +248,7 @@ export default function DashboardIndex({
 
   useEffect(() => {
     setShowScanLogs(false);
+    setShowClassSelector(false);
     setScanLogState({
       loading: false,
       error: null,
@@ -487,7 +493,7 @@ export default function DashboardIndex({
             <PlayCircle className="h-5 w-5 text-teal-700" />
             Lancer un scan
           </CardTitle>
-          <CardDescription>Mode delta par défaut, complet ou classes ciblées</CardDescription>
+          <CardDescription>Mode complet par défaut, delta ou classes ciblées</CardDescription>
           <form className="mt-4 space-y-3" onSubmit={submitScan}>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Connexion</label>
@@ -519,80 +525,114 @@ export default function DashboardIndex({
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Mode</label>
               <Select value={form.data.mode} onChange={(e) => form.setData('mode', e.target.value)}>
-                <option value="delta">Delta</option>
                 <option value="full">Complet</option>
+                <option value="delta">Delta</option>
               </Select>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                  <SearchCode className="h-3.5 w-3.5" />
-                  Classes détectées ({discoveredClasses.length})
-                </label>
-                <div className="flex items-center gap-2">
-                  {selectedClasses.length > 0 ? <Badge tone="info">{selectedClasses.length} sélectionnée(s)</Badge> : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={discoverClasses}
-                    disabled={discoverForm.processing || !selectedConnection}
-                  >
-                    {discoverForm.processing ? 'Découverte...' : 'Découvrir les classes'}
-                  </Button>
-                </div>
-              </div>
-              <Input
-                className="mt-2"
-                placeholder="Filtrer les classes détectées"
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-              />
-              <div className="mt-2 flex max-h-32 flex-wrap gap-2 overflow-auto">
-                {filteredDiscoveredClasses.map((className) => {
-                  const selected = selectedClasses.includes(className);
-                  return (
-                    <button
-                      key={className}
-                      type="button"
-                      onClick={() => toggleClassSelection(className)}
-                      className={`rounded-full border px-2 py-1 text-xs ${selected ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-300 bg-white text-slate-700'}`}
-                    >
-                      {className}
-                    </button>
-                  );
-                })}
-                {filteredDiscoveredClasses.length === 0 ? (
-                  <p className="text-xs text-slate-500">
-                    Aucune classe détectée pour cette connexion. Lance d&apos;abord un scan complet.
-                  </p>
-                ) : null}
-              </div>
+            <div>
+              <label className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600">
+                <SearchCode className="h-3.5 w-3.5" />
+                Classes ciblées (CSV, optionnel)
+              </label>
+              <Input placeholder="Server,Person,Ticket" value={form.data.classes} onChange={(e) => form.setData('classes', e.target.value)} />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Laisse vide pour scanner toutes les classes du mode choisi.
+              </p>
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">Classes (CSV, optionnel)</label>
-              <Input placeholder="Server,Person,Ticket" value={form.data.classes} onChange={(e) => form.setData('classes', e.target.value)} />
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={discoverClasses}
+                  disabled={discoverForm.processing || !selectedConnection}
+                >
+                  {discoverForm.processing ? 'Découverte...' : 'Découvrir les classes'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowClassSelector((value) => !value)}
+                  disabled={discoveredClasses.length === 0}
+                >
+                  {showClassSelector ? 'Masquer le sélecteur' : 'Afficher le sélecteur'}
+                </Button>
+                {selectedClasses.length > 0 ? (
+                  <>
+                    <Badge tone="info">{selectedClasses.length} sélectionnée(s)</Badge>
+                    <Button type="button" variant="outline" onClick={clearSelectedClasses}>
+                      Effacer
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+
+              {showClassSelector ? (
+                <>
+                  <Input
+                    className="mt-2"
+                    placeholder="Filtrer les classes détectées"
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                  />
+                  <div className="mt-2 flex max-h-28 flex-wrap gap-2 overflow-auto">
+                    {filteredDiscoveredClasses.map((className) => {
+                      const selected = selectedClasses.includes(className);
+                      return (
+                        <button
+                          key={className}
+                          type="button"
+                          onClick={() => toggleClassSelection(className)}
+                          className={`rounded-full border px-2 py-1 text-xs ${selected ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-300 bg-white text-slate-700'}`}
+                        >
+                          {className}
+                        </button>
+                      );
+                    })}
+                    {filteredDiscoveredClasses.length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        Aucune classe détectée pour cette connexion.
+                      </p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">Seuil d&apos;obsolescence (jours)</label>
-              <Input type="number" min="1" max="3650" value={form.data.thresholdDays} onChange={(e) => form.setData('thresholdDays', Number(e.target.value))} />
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-              <p className="inline-flex items-center gap-1">
+
+            <details className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+              <summary className="inline-flex cursor-pointer items-center gap-1 font-semibold text-slate-700">
                 <Filter className="h-3.5 w-3.5" />
-                Plan : {modeLabel(form.data.mode, t)} | classes ciblées : {selectedClasses.length} | seuil : {form.data.thresholdDays} jours | forcer classes : {form.data.forceSelectedClasses ? 'oui' : 'non'}
-              </p>
-              <p className="mt-1">Le scan est exécuté immédiatement si Redis n&apos;est pas actif.</p>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-slate-700">
-              <input
-                type="checkbox"
-                checked={Boolean(form.data.forceSelectedClasses)}
-                onChange={(e) => form.setData('forceSelectedClasses', e.target.checked)}
-              />
-              Forcer les contrôles pour les classes ciblées (ignore les acquittements sur ces classes)
-            </label>
+                Paramètres avancés
+              </summary>
+              <div className="mt-2 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Seuil d&apos;obsolescence (jours)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="3650"
+                    value={form.data.thresholdDays}
+                    onChange={(e) => form.setData('thresholdDays', Number(e.target.value))}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Utilisé par les contrôles d&apos;obsolescence (ancienneté du dernier update).
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.data.forceSelectedClasses)}
+                    onChange={(e) => form.setData('forceSelectedClasses', e.target.checked)}
+                  />
+                  Forcer les contrôles pour les classes ciblées (ignore les acquittements sur ces classes)
+                </label>
+              </div>
+            </details>
+
             <Button type="submit" className="w-full" disabled={form.processing || !selectedConnection}>
               {form.processing ? 'Exécution en cours…' : 'Exécuter'}
             </Button>

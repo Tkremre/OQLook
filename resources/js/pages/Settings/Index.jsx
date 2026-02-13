@@ -164,9 +164,16 @@ export default function SettingsIndex({ readmes = [] }) {
                       <span>{t('settings.readmeSize')}: {formatSize(activeReadme.size_bytes)}</span>
                     </div>
                   </div>
-                  <pre className="mt-3 max-h-[52vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs sm:whitespace-pre">
-                    {activeReadme.content}
-                  </pre>
+                  {activeReadme.content_html ? (
+                    <div
+                      className="oq-readme-html mt-3 max-h-[52vh] overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs"
+                      dangerouslySetInnerHTML={{ __html: activeReadme.content_html }}
+                    />
+                  ) : (
+                    <pre className="mt-3 max-h-[52vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs sm:whitespace-pre">
+                      {activeReadme.content}
+                    </pre>
+                  )}
                 </div>
               ) : null}
             </>

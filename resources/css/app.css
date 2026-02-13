@@ -614,6 +614,106 @@ h4 {
   animation: oq-appear 320ms ease-out;
 }
 
+.oq-readme-html h1,
+.oq-readme-html h2,
+.oq-readme-html h3,
+.oq-readme-html h4 {
+  margin: 1rem 0 0.5rem;
+  font-family: var(--font-display);
+  line-height: 1.25;
+  color: inherit;
+}
+
+.oq-readme-html h1 {
+  font-size: 1.35rem;
+}
+
+.oq-readme-html h2 {
+  font-size: 1.15rem;
+}
+
+.oq-readme-html h3,
+.oq-readme-html h4 {
+  font-size: 1rem;
+}
+
+.oq-readme-html p {
+  margin: 0.5rem 0;
+}
+
+.oq-readme-html ul,
+.oq-readme-html ol {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.1rem;
+}
+
+.oq-readme-html li {
+  margin: 0.2rem 0;
+}
+
+.oq-readme-html a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.oq-readme-html code {
+  border-radius: 0.35rem;
+  background: rgba(148, 163, 184, 0.18);
+  padding: 0.12rem 0.35rem;
+  font-size: 0.92em;
+}
+
+.oq-readme-html pre {
+  margin: 0.75rem 0;
+  overflow: auto;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(248, 250, 252, 0.72);
+  padding: 0.7rem;
+}
+
+.oq-readme-html pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.oq-readme-html table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.95em;
+}
+
+.oq-readme-html th,
+.oq-readme-html td {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0.45rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.oq-readme-html blockquote {
+  margin: 0.75rem 0;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  padding-left: 0.7rem;
+  color: var(--muted);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html code {
+  background: rgba(71, 85, 105, 0.35);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html pre {
+  border-color: rgba(71, 85, 105, 0.5);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html th,
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html td {
+  border-color: rgba(71, 85, 105, 0.55);
+}
+
 @keyframes oq-appear {
   from {
     opacity: 0;

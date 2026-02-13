@@ -87,7 +87,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
   const [severityFilter, setSeverityFilter] = useState('all');
   const [classFilter, setClassFilter] = useState('all');
   const [minAffected, setMinAffected] = useState('');
-  const [onlyWithSamples, setOnlyWithSamples] = useState(false);
   const [sortBy, setSortBy] = useState('affected_desc');
   const [search, setSearch] = useState('');
   const [quickView, setQuickView] = useState('all');
@@ -128,7 +127,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
       if (severityFilter !== 'all' && issue.severity !== severityFilter) return false;
       if (classFilter !== 'all' && issueClass !== classFilter) return false;
       if (hasMinAffected && Number(issue.affected_count || 0) < minAffectedValue) return false;
-      if (onlyWithSamples && Number(issue.samples_count || 0) <= 0) return false;
 
       if (normalizedSearch !== '') {
         const haystack = [
@@ -175,7 +173,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
           return Number(b.affected_count || 0) - Number(a.affected_count || 0);
       }
     });
-  }, [issues, quickView, domainFilter, severityFilter, classFilter, minAffected, onlyWithSamples, search, sortBy]);
+  }, [issues, quickView, domainFilter, severityFilter, classFilter, minAffected, search, sortBy]);
 
   const quickViewStats = useMemo(() => {
     let adminPack = 0;
@@ -217,7 +215,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
 
   useEffect(() => {
     setPage(1);
-  }, [quickView, domainFilter, severityFilter, classFilter, minAffected, onlyWithSamples, sortBy, search, rowsPerPage]);
+  }, [quickView, domainFilter, severityFilter, classFilter, minAffected, sortBy, search, rowsPerPage]);
 
   const pagination = useMemo(() => {
     const totalItems = filtered.length;
@@ -275,7 +273,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
     setSeverityFilter('all');
     setClassFilter('all');
     setMinAffected('');
-    setOnlyWithSamples(false);
     setSortBy('affected_desc');
     setSearch('');
     setRowsPerPage(100);
@@ -478,17 +475,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Minimum affecté</label>
                 <Input value={minAffected} onChange={(e) => setMinAffected(e.target.value)} placeholder="0" />
               </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700">
-                  <input
-                    id="onlyWithSamples"
-                    type="checkbox"
-                    checked={onlyWithSamples}
-                    onChange={(e) => setOnlyWithSamples(e.target.checked)}
-                  />
-                  Seulement avec échantillons
-                </label>
-              </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
                 <p>Visibles : <span className="font-semibold">{filteredStats.count}</span> / {issues.length}</p>
                 <p>Total affecté : <span className="font-semibold">{filteredStats.affected}</span></p>
@@ -608,7 +594,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
             </div>
 
             <div className="mt-3 hidden md:block oq-table-wrap oq-table-wrap--issues">
-              <table className="min-w-[1380px] w-full text-sm leading-relaxed">
+              <table className="min-w-[1280px] w-full text-sm leading-relaxed">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
                     <th className="oq-col-sticky-left px-3 py-3 text-xs font-semibold uppercase tracking-wide">Code</th>
@@ -617,7 +603,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                     <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Sévérité</th>
                     <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Impact</th>
                     <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Affecté</th>
-                    <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Échantillons</th>
                     <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Classe</th>
                     <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Recommandation</th>
                     <th className="oq-col-sticky-right px-3 py-3 text-xs font-semibold uppercase tracking-wide">Action</th>
@@ -626,7 +611,7 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-3 text-slate-500">
+                      <td colSpan={9} className="py-3 text-slate-500">
                         Aucune anomalie ne correspond aux filtres.
                       </td>
                     </tr>
@@ -643,7 +628,6 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                       <td className="px-3 py-3"><Badge tone={toneFromSeverity(issue.severity)}>{severityLabel(issue.severity)}</Badge></td>
                       <td className="px-3 py-3">{issue.impact}</td>
                       <td className="px-3 py-3 font-semibold">{issue.affected_count}</td>
-                      <td className="px-3 py-3">{issue.samples_count ?? 0}</td>
                       <td className="px-3 py-3">{resolveIssueClass(issue)}</td>
                       <td className="px-3 py-3 text-sm text-slate-700">{issue.recommendation ? issue.recommendation : 'N/D'}</td>
                       <td className="oq-col-sticky-right px-3 py-3">

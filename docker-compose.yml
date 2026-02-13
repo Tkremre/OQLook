@@ -1,0 +1,46 @@
+﻿version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8000"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8080
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: oqlike
+      DB_USERNAME: oqlike
+      DB_PASSWORD: oqlike
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      SESSION_DRIVER: database
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: oqlike
+      POSTGRES_USER: oqlike
+      POSTGRES_PASSWORD: oqlike
+    ports:
+      - "5434:5432"
+    volumes:
+      - oqlike_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+
+volumes:
+  oqlike_pg:

@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
 @import 'tailwindcss';
 
 :root {
@@ -225,6 +225,10 @@ h4 {
   background: var(--card);
   backdrop-filter: blur(2px);
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+}
+
+.oq-brand-mark {
+  color: var(--accent);
 }
 
 .oq-card:hover {
@@ -639,6 +643,72 @@ h4 {
   color: inherit;
 }
 
+.oq-about-modal {
+  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.oq-about-hero {
+  border-color: rgba(148, 163, 184, 0.4);
+  background: linear-gradient(95deg, rgba(240, 253, 250, 0.95), rgba(239, 246, 255, 0.95));
+}
+
+.oq-about-panel {
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.oq-about-tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 0.6rem;
+}
+
+.oq-about-tech-button {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(255, 255, 255, 0.98);
+  color: #64748b;
+  min-width: 0;
+  min-height: 64px;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.oq-about-tech-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, rgba(148, 163, 184, 0.5));
+  background: rgba(241, 245, 249, 1);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.oq-about-tech-button:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 52%, rgba(148, 163, 184, 0.5));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent);
+}
+
+.oq-about-tech-glyph {
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+@media (min-width: 1024px) {
+  .oq-about-tech-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
 .oq-readme-html h1 {
   font-size: 1.35rem;
 }
@@ -717,6 +787,39 @@ h4 {
 
 :root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html code {
   background: rgba(71, 85, 105, 0.35);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-modal {
+  border-color: rgba(71, 85, 105, 0.72);
+  background: rgba(10, 16, 30, 0.98);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-hero {
+  border-color: rgba(71, 85, 105, 0.7);
+  background: linear-gradient(95deg, rgba(20, 31, 54, 0.9), rgba(14, 26, 47, 0.9));
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-panel {
+  border-color: rgba(71, 85, 105, 0.7);
+  background: rgba(15, 23, 42, 0.82);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-tech-button {
+  border-color: rgba(71, 85, 105, 0.8);
+  background: rgba(12, 20, 35, 0.9);
+  color: #cbd7ea;
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-tech-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, rgba(71, 85, 105, 0.8));
+  background: rgba(18, 27, 43, 0.98);
+  color: var(--accent);
+}
+
+:root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-about-tech-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, rgba(71, 85, 105, 0.8));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
 }
 
 :root:is([data-oq-theme='dark'], [data-oq-theme='midnight'], [data-oq-theme='graphite']) .oq-readme-html pre {

@@ -355,55 +355,62 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
               Filtres et tri
             </CardTitle>
             <CardDescription>Affinage multicritère pour exploiter les anomalies</CardDescription>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setQuickView('all')}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  quickView === 'all'
-                    ? 'border-teal-600 bg-teal-50 text-teal-800'
-                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <ListChecks className="h-3.5 w-3.5" />
-                Toutes ({quickViewStats.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickView('admin_pack')}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  quickView === 'admin_pack'
-                    ? 'border-sky-600 bg-sky-50 text-sky-800'
-                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Admin CMDB ({quickViewStats.admin_pack})
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickView('critical')}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  quickView === 'critical'
-                    ? 'border-rose-600 bg-rose-50 text-rose-800'
-                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <Flame className="h-3.5 w-3.5" />
-                Critiques ({quickViewStats.critical})
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickView('high_impact')}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  quickView === 'high_impact'
-                    ? 'border-amber-600 bg-amber-50 text-amber-800'
-                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <Target className="h-3.5 w-3.5" />
-                Impact {'>='} 4 ({quickViewStats.high_impact})
-              </button>
+            <div className="mt-3 flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuickView('all')}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    quickView === 'all'
+                      ? 'border-teal-600 bg-teal-50 text-teal-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Toutes ({quickViewStats.all})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickView('admin_pack')}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    quickView === 'admin_pack'
+                      ? 'border-sky-600 bg-sky-50 text-sky-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Admin CMDB ({quickViewStats.admin_pack})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickView('critical')}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    quickView === 'critical'
+                      ? 'border-rose-600 bg-rose-50 text-rose-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <Flame className="h-3.5 w-3.5" />
+                  Critiques ({quickViewStats.critical})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickView('high_impact')}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    quickView === 'high_impact'
+                      ? 'border-amber-600 bg-amber-50 text-amber-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  Impact {'>='} 4 ({quickViewStats.high_impact})
+                </button>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700 xl:min-w-[260px]">
+                <p>Visibles : <span className="font-semibold">{filteredStats.count}</span> / {issues.length}</p>
+                <p>Total affecté : <span className="font-semibold">{filteredStats.affected}</span></p>
+                <p>Crit/Avertissement/Info : <span className="font-semibold">{filteredStats.crit}/{filteredStats.warn}/{filteredStats.info}</span></p>
+              </div>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <div className="xl:col-span-2">
@@ -477,21 +484,16 @@ export default function IssuesIndex({ scan, scans = [], issues = [], acknowledge
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Minimum affecté</label>
                 <Input value={minAffected} onChange={(e) => setMinAffected(e.target.value)} placeholder="0" />
               </div>
-              <div className="flex items-end">
+              <div className="flex items-end xl:col-start-6">
                 <Button
                   type="button"
                   variant="outline"
-                  className="inline-flex w-full items-center justify-center gap-2"
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 sm:h-9"
                   onClick={() => setShowAcknowledgementsModal(true)}
                 >
                   <CircleCheckBig className="h-4 w-4" />
                   Acquittements actifs ({acknowledgements.length})
                 </Button>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-                <p>Visibles : <span className="font-semibold">{filteredStats.count}</span> / {issues.length}</p>
-                <p>Total affecté : <span className="font-semibold">{filteredStats.affected}</span></p>
-                <p>Crit/Avertissement/Info : <span className="font-semibold">{filteredStats.crit}/{filteredStats.warn}/{filteredStats.info}</span></p>
               </div>
             </div>
           </Card>

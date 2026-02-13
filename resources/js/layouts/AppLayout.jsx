@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { appPath } from '../lib/app-path';
+import OqlookMark from '../components/OqlookMark';
 import { useI18n } from '../i18n';
 import { useUiPrefs } from '../ui-prefs';
 
@@ -28,15 +29,15 @@ const APP_LICENSE_NAME = 'MIT';
 const APP_LICENSE_URL = 'https://github.com/Tkremre/OQLook/blob/main/LICENSE';
 const APP_EDITOR_URL = 'https://github.com/Tkremre';
 const APP_CONTRIBUTORS_URL = 'https://github.com/Tkremre/OQLook/graphs/contributors';
-const APP_OPENAI_URL = 'https://openai.com';
+const APP_OPENAI_URL = 'https://openai.com/codex';
 const APP_TECH_STACK = [
-  'Laravel',
-  'Inertia.js',
-  'React',
-  'Tailwind CSS',
-  'PostgreSQL',
-  'iTop / OQL',
-  'OpenAI Codex (GPT-5)',
+  { name: 'Laravel', url: 'https://laravel.com', iconPath: 'brand/tech/laravel.svg' },
+  { name: 'Inertia.js', url: 'https://inertiajs.com', iconPath: 'brand/tech/inertia.svg' },
+  { name: 'React', url: 'https://react.dev', iconPath: 'brand/tech/react.svg' },
+  { name: 'Tailwind CSS', url: 'https://tailwindcss.com', iconPath: 'brand/tech/tailwindcss.svg' },
+  { name: 'PostgreSQL', url: 'https://www.postgresql.org', iconPath: 'brand/tech/postgresql.svg' },
+  { name: 'iTop / Combodo', url: 'https://www.combodo.com', iconPath: 'brand/tech/itop.svg' },
+  { name: 'OpenAI Codex (GPT-5)', url: 'https://openai.com/codex', iconPath: 'brand/tech/openai.svg' },
 ];
 
 const NAV_ITEMS = [
@@ -193,11 +194,7 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
       <aside className={`oq-sidebar hidden lg:sticky lg:top-0 lg:z-40 lg:flex lg:h-[100dvh] lg:min-h-[100dvh] lg:max-h-[100dvh] lg:shrink-0 lg:flex-col lg:overflow-hidden lg:border-r lg:border-slate-200/80 lg:bg-white/90 lg:backdrop-blur-xl ${sidebarWidthClass}`}>
         <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 px-3 py-3">
           <Link href={appPath('')} className={`flex min-w-0 items-center ${sidebarCollapsed ? 'justify-center gap-0' : 'gap-3'}`}>
-            <img
-              src={appPath('brand/oqlook-mark.svg')}
-              alt="OQLook"
-              className="h-10 w-10 shrink-0"
-            />
+            <OqlookMark className="oq-brand-mark h-10 w-10 shrink-0" />
             {!sidebarCollapsed ? (
               <div className="min-w-0">
                 <p className="truncate text-lg font-bold tracking-tight text-slate-900">{t('app.name')}</p>
@@ -277,11 +274,7 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
         <header className="oq-mobilebar sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-slate-900/5 backdrop-blur-xl lg:hidden">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <Link href={appPath('')} className="flex min-w-0 items-center gap-2.5">
-              <img
-                src={appPath('brand/oqlook-mark.svg')}
-                alt="OQLook"
-                className="h-9 w-9 shrink-0"
-              />
+                <OqlookMark className="oq-brand-mark h-9 w-9 shrink-0" />
               <div className="min-w-0">
                 <p className="truncate text-base font-bold tracking-tight text-slate-900">{t('app.name')}</p>
                 <p className="truncate text-[11px] text-slate-500">{sectionLabel}</p>
@@ -371,17 +364,13 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
           onClick={() => setAboutOpen(false)}
         >
           <div
-            className="relative w-full max-w-2xl rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xl"
+            className="oq-about-modal relative w-full max-w-2xl rounded-2xl border p-5 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-teal-50 via-white to-sky-50 p-4">
+            <div className="oq-about-hero rounded-2xl border p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={appPath('brand/oqlook-mark.svg')}
-                    alt="OQLook"
-                    className="h-12 w-12 shrink-0"
-                  />
+                  <OqlookMark className="oq-brand-mark h-12 w-12 shrink-0" />
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">{t('about.title')}</h2>
                   </div>
@@ -400,7 +389,7 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
             </button>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <div className="oq-about-panel rounded-xl border p-3 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('about.applicationInfo')}</p>
                 <p className="mt-2">
                   <span className="font-semibold text-slate-700">{t('about.version')}</span>: {APP_VERSION}
@@ -413,7 +402,7 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <div className="oq-about-panel rounded-xl border p-3 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('about.editors')}</p>
                 <div className="mt-2 flex flex-col gap-2">
                   <a
@@ -447,21 +436,36 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="oq-about-panel mt-4 rounded-xl border p-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('about.technologies')}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {APP_TECH_STACK.map((tech) => (
-                  <span
-                    key={tech}
-                    className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700"
-                  >
-                    {tech}
-                  </span>
-                ))}
+              <div className="oq-about-tech-grid mt-2">
+                {APP_TECH_STACK.map((tech) => {
+                  return (
+                    <a
+                      key={tech.name}
+                      href={tech.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="oq-about-tech-button inline-flex w-full aspect-square items-center justify-center rounded-full border"
+                      title={tech.name}
+                      aria-label={tech.name}
+                    >
+                      <span
+                        className="oq-about-tech-glyph h-7 w-7"
+                        style={{
+                          WebkitMaskImage: `url(${appPath(tech.iconPath)})`,
+                          maskImage: `url(${appPath(tech.iconPath)})`,
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">{tech.name}</span>
+                    </a>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="oq-about-panel mt-4 rounded-xl border p-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('about.license')}</p>
               <p className="mt-2 text-slate-700">{t('about.licenseSummary')}</p>
               <a

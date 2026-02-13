@@ -18,6 +18,7 @@ import {
   SearchCode,
   ShieldCheck,
   Sparkles,
+  X,
 } from 'lucide-react';
 
 function severityTone(severity) {
@@ -131,6 +132,7 @@ export default function DashboardIndex({
     return [...checkSummaries]
       .sort((a, b) => (b.issues_found ?? 0) - (a.issues_found ?? 0) || (b.executed_count ?? 0) - (a.executed_count ?? 0));
   }, [checkSummaries]);
+  const canShowScanLogsButton = scanProgress.active || form.processing || scanLogState.running;
 
   const toggleClassSelection = (className) => {
     const next = new Set(selectedClasses);
@@ -652,46 +654,16 @@ export default function DashboardIndex({
                 </p>
               </div>
             ) : null}
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!selectedConnection}
-                onClick={() => setShowScanLogs((open) => !open)}
-              >
-                {showScanLogs ? 'Masquer les logs du scan' : 'Voir les logs du scan'}
-              </Button>
-              {showScanLogs ? (
+            {canShowScanLogsButton ? (
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!selectedConnection || scanLogState.loading}
-                  onClick={() => void fetchScanLogs(false)}
+                  disabled={!selectedConnection}
+                  onClick={() => setShowScanLogs(true)}
                 >
-                  {scanLogState.loading ? 'Chargement...' : 'Actualiser'}
+                  Voir les logs du scan
                 </Button>
-              ) : null}
-            </div>
-            {showScanLogs ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold">
-                    Logs scan {scanLogState.scanId ? `#${scanLogState.scanId}` : '(connexion)'}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {scanLogState.running ? 'en cours' : 'inactif'} | {scanLogState.updatedAt ? `Mise à jour ${new Date(scanLogState.updatedAt).toLocaleTimeString()}` : 'pas encore chargé'}
-                  </p>
-                </div>
-                {scanLogState.error ? (
-                  <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">
-                    Erreur des logs : {scanLogState.error}
-                  </p>
-                ) : null}
-                <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-slate-900 p-2 text-[11px] leading-4 text-slate-100">
-                  {scanLogState.lines.length > 0
-                    ? scanLogState.lines.join('\n')
-                    : 'Aucune ligne de scan récente. Lance un scan ou clique sur "Actualiser".'}
-                </pre>
               </div>
             ) : null}
           </form>
@@ -842,6 +814,62 @@ export default function DashboardIndex({
           </div>
         </Card>
       </div>
+
+      {showScanLogs ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Logs du scan"
+          onClick={() => setShowScanLogs(false)}
+        >
+          <div
+            className="relative flex h-[85vh] w-full max-w-6xl flex-col rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              onClick={() => setShowScanLogs(false)}
+              aria-label="Fermer"
+              title="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pr-10">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Logs scan {scanLogState.scanId ? `#${scanLogState.scanId}` : '(connexion)'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {scanLogState.running ? 'en cours' : 'inactif'} | {scanLogState.updatedAt ? `Mise à jour ${new Date(scanLogState.updatedAt).toLocaleTimeString()}` : 'pas encore chargé'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedConnection || scanLogState.loading}
+                onClick={() => void fetchScanLogs(false)}
+              >
+                {scanLogState.loading ? 'Chargement...' : 'Actualiser'}
+              </Button>
+            </div>
+
+            {scanLogState.error ? (
+              <p className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                Erreur des logs : {scanLogState.error}
+              </p>
+            ) : null}
+
+            <pre className="min-h-0 flex-1 overflow-auto rounded-lg bg-slate-900 p-3 text-[12px] leading-5 text-slate-100">
+              {scanLogState.lines.length > 0
+                ? scanLogState.lines.join('\n')
+                : 'Aucune ligne de scan récente. Lance un scan ou clique sur "Actualiser".'}
+            </pre>
+          </div>
+        </div>
+      ) : null}
     </AppLayout>
   );
 }

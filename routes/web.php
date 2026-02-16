@@ -20,6 +20,9 @@ Route::post('/connections/{connection}/test-itop', [ConnectionWizardController::
 Route::post('/connections/{connection}/test-connector', [ConnectionWizardController::class, 'testConnector'])->name('connections.test-connector');
 Route::post('/connections/{connection}/scan', [ScanController::class, 'store'])->name('connections.scan');
 Route::post('/connections/{connection}/discover-classes', [ScanController::class, 'discoverClasses'])->name('connections.discover-classes');
+Route::post('/connections/{connection}/audit-rules/sync', [ScanController::class, 'syncAuditRules'])->name('connections.audit-rules.sync');
+Route::post('/connections/{connection}/audit-rules/acknowledge', [ScanController::class, 'acknowledgeAuditRule'])->name('connections.audit-rules.acknowledge');
+Route::delete('/connections/{connection}/audit-rules/acknowledge', [ScanController::class, 'deacknowledgeAuditRule'])->name('connections.audit-rules.deacknowledge');
 Route::get('/connections/{connection}/scan-log', [ScanController::class, 'scanLog'])->name('connections.scan-log');
 Route::post('/scans/{scan}/resume', [ScanController::class, 'resume'])->whereNumber('scan')->name('scans.resume');
 Route::delete('/scans/{scan}', [ScanController::class, 'destroy'])->whereNumber('scan')->name('scans.destroy');
@@ -28,6 +31,7 @@ Route::get('/issues/{scan?}', [IssueController::class, 'index'])->whereNumber('s
 Route::get('/issue/{issue}', [IssueController::class, 'show'])->whereNumber('issue')->name('issues.show');
 Route::get('/issue/{issue}/objects', [IssueController::class, 'impactedObjects'])->whereNumber('issue')->name('issues.objects');
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+Route::post('/settings/check-preferences', [SettingsController::class, 'updateCheckPreferences'])->name('settings.check-preferences');
 Route::post('/issues/{issue}/acknowledge', [IssueAcknowledgementController::class, 'acknowledgeIssue'])->whereNumber('issue')->name('issues.acknowledge');
 Route::delete('/issues/{issue}/acknowledge', [IssueAcknowledgementController::class, 'deacknowledgeIssue'])->whereNumber('issue')->name('issues.deacknowledge');
 Route::post('/issues/{issue}/objects/acknowledge', [IssueAcknowledgementController::class, 'acknowledgeObject'])->whereNumber('issue')->name('issues.objects.acknowledge');

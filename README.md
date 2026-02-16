@@ -33,6 +33,7 @@ OQLook audite la qualité des données iTop CMDB avec des contrôles adaptatifs,
 - Multi-domain scoring: `completeness`, `consistency`, `relations`, `obsolescence`, `hygiene`.
 - Full and delta scans.
 - Rule-level and object-level acknowledgements.
+- Configurable compliance rules in UI (enable/disable checks + severity override).
 - Drilldown list of impacted objects with filters/sorting.
 - PDF export of scan context, KPIs and issue details.
 - iTop metamodel discovery via REST and optional connector.
@@ -59,7 +60,7 @@ OQLook audite la qualité des données iTop CMDB avec des contrôles adaptatifs,
 Clone:
 
 ```bash
-git clone https://github.com/<org>/OQLook.git
+git clone https://github.com/Tkremre/OQLook.git
 cd OQLook
 ```
 

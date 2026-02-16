@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\OQLike\TriggerScanRequest;
 use App\Jobs\RunScanJob;
 use App\Models\Connection;
+use App\Models\IssueAcknowledgement;
 use App\Models\Scan;
 use App\OQLike\Clients\ConnectorClient;
 use App\OQLike\Clients\ItopClient;
@@ -14,6 +15,7 @@ use App\OQLike\Scanning\ScanWatchdogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class ScanController extends Controller
@@ -321,6 +323,138 @@ class ScanController extends Controller
         }
     }
 
+    public function syncAuditRules(Request $request, Connection $connection)
+    {
+        try {
+            $this->prepareLongRunningSyncScan();
+
+            $itopClient = new ItopClient($connection);
+            $rules = $itopClient->discoverAuditRules();
+            $rules = array_values(array_map(function (array $rule): array {
+                $ruleId = trim((string) ($rule['rule_id'] ?? ''));
+                $targetClass = trim((string) ($rule['target_class'] ?? ''));
+
+                return [
+                    'rule_id' => $ruleId,
+                    'issue_code' => $this->auditRuleIssueCode($ruleId),
+                    'name' => trim((string) ($rule['name'] ?? ('AuditRule #'.$ruleId))),
+                    'status' => trim((string) ($rule['status'] ?? '')),
+                    'target_class' => $targetClass !== '' ? $targetClass : null,
+                    'oql' => trim((string) ($rule['oql'] ?? '')) ?: null,
+                    'executable' => (bool) ($rule['executable'] ?? false),
+                ];
+            }, $rules));
+
+            $ackByCode = $this->loadAuditRuleAcksByIssueCode($connection->id);
+
+            foreach ($rules as &$rule) {
+                $rule['acknowledged'] = (bool) ($ackByCode[$rule['issue_code']] ?? false);
+            }
+            unset($rule);
+
+            $fallbackConfig = is_array($connection->fallback_config_json) ? $connection->fallback_config_json : [];
+            $fallbackConfig['itop_audit_rules'] = $rules;
+            $fallbackConfig['itop_audit_rules_synced_at'] = now()->toIso8601String();
+            $fallbackConfig['itop_audit_rules_source'] = 'itop_AuditRule';
+            $connection->fallback_config_json = $fallbackConfig;
+            $connection->save();
+
+            $status = sprintf('Règles Audit iTop synchronisées: %d règle(s).', count($rules));
+
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'ok' => true,
+                    'status' => $status,
+                    'rules' => $rules,
+                ]);
+            }
+
+            return redirect()->route('dashboard', ['connection' => $connection->id])->with('status', $status);
+        } catch (Throwable $exception) {
+            $message = 'Échec de la synchronisation des règles Audit iTop: '.$exception->getMessage();
+
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'ok' => false,
+                    'status' => $message,
+                ], 422);
+            }
+
+            return redirect()->route('dashboard', ['connection' => $connection->id])->with('status', $message);
+        }
+    }
+
+    public function acknowledgeAuditRule(Request $request, Connection $connection): JsonResponse
+    {
+        if (! Schema::hasTable('issue_acknowledgements')) {
+            return response()->json([
+                'ok' => false,
+                'status' => 'Acquittement indisponible: migration issue_acknowledgements manquante.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'rule_id' => ['required', 'string', 'max:120'],
+            'target_class' => ['required', 'string', 'max:255'],
+            'name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $ruleId = trim((string) $validated['rule_id']);
+        $targetClass = trim((string) $validated['target_class']);
+        $issueCode = $this->auditRuleIssueCode($ruleId);
+        $title = trim((string) ($validated['name'] ?? ('AuditRule #'.$ruleId)));
+
+        IssueAcknowledgement::query()->updateOrCreate(
+            [
+                'connection_id' => $connection->id,
+                'itop_class' => $targetClass,
+                'issue_code' => $issueCode,
+            ],
+            [
+                'domain' => 'audit',
+                'title' => $title,
+                'note' => 'Acquittement règle Audit iTop',
+            ]
+        );
+
+        return response()->json([
+            'ok' => true,
+            'status' => sprintf('Règle Audit acquittée: %s (%s).', $title, $issueCode),
+            'issue_code' => $issueCode,
+        ]);
+    }
+
+    public function deacknowledgeAuditRule(Request $request, Connection $connection): JsonResponse
+    {
+        if (! Schema::hasTable('issue_acknowledgements')) {
+            return response()->json([
+                'ok' => false,
+                'status' => 'Désacquittement indisponible: migration issue_acknowledgements manquante.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'rule_id' => ['required', 'string', 'max:120'],
+            'target_class' => ['required', 'string', 'max:255'],
+        ]);
+
+        $ruleId = trim((string) $validated['rule_id']);
+        $targetClass = trim((string) $validated['target_class']);
+        $issueCode = $this->auditRuleIssueCode($ruleId);
+
+        IssueAcknowledgement::query()
+            ->where('connection_id', $connection->id)
+            ->where('itop_class', $targetClass)
+            ->where('issue_code', $issueCode)
+            ->delete();
+
+        return response()->json([
+            'ok' => true,
+            'status' => sprintf('Acquittement retiré: %s.', $issueCode),
+            'issue_code' => $issueCode,
+        ]);
+    }
+
     private function shouldQueue(): bool
     {
         if (! (bool) config('oqlike.use_queue', false)) {
@@ -375,6 +509,49 @@ class ScanController extends Controller
         }
 
         return array_keys($classes);
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function loadAuditRuleAcksByIssueCode(int $connectionId): array
+    {
+        if (! Schema::hasTable('issue_acknowledgements')) {
+            return [];
+        }
+
+        try {
+            $rows = IssueAcknowledgement::query()
+                ->where('connection_id', $connectionId)
+                ->where('issue_code', 'like', 'ITOP_AUDIT_RULE_%')
+                ->get(['issue_code']);
+        } catch (Throwable) {
+            return [];
+        }
+
+        $index = [];
+
+        foreach ($rows as $row) {
+            $code = trim((string) $row->issue_code);
+            if ($code === '') {
+                continue;
+            }
+            $index[$code] = true;
+        }
+
+        return $index;
+    }
+
+    private function auditRuleIssueCode(string $ruleId): string
+    {
+        $normalized = preg_replace('/[^A-Za-z0-9]+/', '_', strtoupper(trim($ruleId))) ?? '';
+        $normalized = trim($normalized, '_');
+
+        if ($normalized === '') {
+            $normalized = 'UNKNOWN';
+        }
+
+        return 'ITOP_AUDIT_RULE_'.$normalized;
     }
 
     /**

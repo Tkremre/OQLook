@@ -99,8 +99,9 @@ class MetamodelPayloadParserTest extends TestCase
         $this->assertArrayHasKey('Person', $normalized['classes']);
         $this->assertArrayHasKey('classes_index', $normalized);
         $this->assertArrayHasKey('Server', $normalized['classes_index']);
-        $this->assertSame([], $normalized['classes']['Server']['attributes']);
-        $this->assertFalse($normalized['cache_persistable'] ?? true);
+        $this->assertSame('name', $normalized['classes']['Server']['attributes'][0]['code']);
+        $this->assertTrue($normalized['cache_persistable'] ?? false);
+        $this->assertFalse($normalized['lazy_attributes'] ?? true);
 
         @unlink($path);
     }

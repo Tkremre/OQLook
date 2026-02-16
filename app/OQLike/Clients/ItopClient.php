@@ -104,6 +104,119 @@ class ItopClient
         return array_keys($classes);
     }
 
+    /**
+     * @return array<int, array{
+     *   rule_id: string,
+     *   name: string,
+     *   status: string|null,
+     *   target_class: string|null,
+     *   oql: string|null,
+     *   executable: bool,
+     *   raw_fields: array<string, mixed>
+     * }>
+     */
+    public function discoverAuditRules(int $maxRecords = 1200): array
+    {
+        $maxRecords = max(1, min($maxRecords, 5000));
+        $attempts = [
+            ['*'],
+            ['id', 'friendlyname', 'status', 'name', 'description', 'query', 'oql', 'target_class'],
+            ['id', 'friendlyname', 'status'],
+            ['id'],
+        ];
+
+        $objects = [];
+        $lastError = null;
+
+        foreach ($attempts as $fields) {
+            try {
+                $objects = $this->fetchObjects('AuditRule', '1=1', $fields, $maxRecords);
+                break;
+            } catch (\Throwable $exception) {
+                $lastError = $exception;
+            }
+        }
+
+        if ($objects === [] && $lastError !== null) {
+            throw new RuntimeException('Impossible de récupérer les règles AuditRule iTop: '.$lastError->getMessage());
+        }
+
+        $rules = [];
+
+        foreach ($objects as $object) {
+            $fields = Arr::get($object, 'fields', []);
+            $fields = is_array($fields) ? $fields : [];
+
+            $ruleId = trim((string) Arr::get($object, 'id', Arr::get($fields, 'id', '')));
+
+            if ($ruleId === '') {
+                continue;
+            }
+
+            $name = $this->firstString($object, [
+                'friendlyname',
+                'fields.friendlyname',
+                'fields.name',
+                'fields.code',
+                'fields.ref',
+            ]) ?? ('AuditRule #'.$ruleId);
+
+            $status = $this->firstString($object, [
+                'fields.status',
+                'fields.lifecycle_status',
+                'fields.state',
+            ]);
+
+            $oql = $this->firstString($object, [
+                'fields.oql',
+                'fields.query',
+                'fields.definition',
+                'fields.scope_query',
+                'fields.rule',
+                'fields.condition',
+                'fields.filter',
+            ]);
+            $oql = is_string($oql) ? trim($oql) : null;
+            if ($oql === '') {
+                $oql = null;
+            }
+
+            $targetClass = $this->firstString($object, [
+                'fields.target_class',
+                'fields.class_name',
+                'fields.item_class',
+                'fields.target',
+            ]);
+
+            if (($targetClass === null || $targetClass === '') && is_string($oql)) {
+                $targetClass = $this->extractSelectClassFromOql($oql);
+            }
+
+            if ($targetClass !== null) {
+                $targetClass = trim($targetClass);
+                if ($targetClass === '') {
+                    $targetClass = null;
+                }
+            }
+
+            $isExecutable = $oql !== null && $targetClass !== null;
+
+            $rules[] = [
+                'rule_id' => $ruleId,
+                'name' => $name,
+                'status' => $status,
+                'target_class' => $targetClass,
+                'oql' => $oql,
+                'executable' => $isExecutable,
+                'raw_fields' => $fields,
+            ];
+        }
+
+        usort($rules, static fn (array $a, array $b): int => strcmp($a['name'], $b['name']));
+
+        return $rules;
+    }
+
     public function coreGet(string $class, string $key, array $outputFields, int $limit, int $offset = 0): array
     {
         $limit = max(1, $limit);
@@ -783,5 +896,32 @@ class ItopClient
         }
 
         return sprintf('SELECT %s WHERE %s', $class, $trimmed);
+    }
+
+    private function firstString(array $payload, array $paths): ?string
+    {
+        foreach ($paths as $path) {
+            $value = Arr::get($payload, $path);
+
+            if (is_string($value)) {
+                $value = trim($value);
+
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractSelectClassFromOql(string $oql): ?string
+    {
+        if (preg_match('/^\s*SELECT\s+([A-Za-z0-9_]+)/i', $oql, $matches) !== 1) {
+            return null;
+        }
+
+        $className = trim((string) ($matches[1] ?? ''));
+        return $className !== '' ? $className : null;
     }
 }

@@ -7,18 +7,8 @@ use App\Models\Issue;
 use App\Models\IssueAcknowledgement;
 use App\Models\IssueObjectAcknowledgement;
 use App\Models\Scan;
-use App\OQLike\Checks\ClassificationMissingCheck;
-use App\OQLike\Checks\CompletenessMandatoryEmptyCheck;
-use App\OQLike\Checks\DuplicatesNameCheck;
-use App\OQLike\Checks\NamePlaceholderCheck;
-use App\OQLike\Checks\OrgLocationConsistencyCheck;
-use App\OQLike\Checks\OwnershipMissingCheck;
-use App\OQLike\Checks\RelationsOrphanExternalKeyCheck;
-use App\OQLike\Checks\RelationsMissingExternalKeyCheck;
-use App\OQLike\Checks\StaleWithoutOwnerCheck;
-use App\OQLike\Checks\StatusEmptyCheck;
-use App\OQLike\Checks\StatusObsoleteReferencedCheck;
-use App\OQLike\Checks\StalenessLastUpdateCheck;
+use App\Models\ScanCheckPreference;
+use App\OQLike\Checks\CheckCatalog;
 use App\OQLike\Clients\ItopClient;
 use App\OQLike\Discovery\MetamodelDiscoveryService;
 use Carbon\CarbonImmutable;
@@ -77,6 +67,15 @@ class ScanRunner
         $issueCount = 0;
         $totalAffected = 0;
         $ackSkippedCount = 0;
+        $checkPreferenceIndex = $this->loadCheckPreferences();
+        $disabledCheckCodes = $this->disabledCheckCodes($checkPreferenceIndex);
+        $severityOverrides = $this->configuredSeverityOverrides($checkPreferenceIndex);
+        $configuredChecks = $this->checks($checkPreferenceIndex);
+        $auditRulesByClass = $this->loadExecutableAuditRules($connection);
+        $auditRuleCount = 0;
+        foreach ($auditRulesByClass as $rules) {
+            $auditRuleCount += count($rules);
+        }
         $acknowledgedIssueCodes = $this->loadAcknowledgedIssueCodes($connection);
         $acknowledgedIssueObjects = $this->loadAcknowledgedIssueObjects($connection);
         $acknowledgedIssueObjectRulesCount = $this->countAcknowledgedIssueObjectRules($acknowledgedIssueObjects);
@@ -88,6 +87,26 @@ class ScanRunner
         $completedClassNames = [];
         $heartbeatIntervalMs = max(1, (int) config('oqlike.scan_heartbeat_interval_s', 10)) * 1000;
         $lastHeartbeatWriteAtMs = 0;
+
+        if ($disabledCheckCodes !== []) {
+            $scanWarnings[] = sprintf(
+                'Règles désactivées dans Paramètres (%d): %s',
+                count($disabledCheckCodes),
+                implode(', ', $disabledCheckCodes)
+            );
+        }
+
+        if ($configuredChecks === []) {
+            $scanWarnings[] = 'Aucun contrôle actif: activez au moins une règle dans Paramètres > Règles de conformité.';
+        }
+
+        if ($auditRuleCount > 0) {
+            $scanWarnings[] = sprintf(
+                'Règles Audit iTop actives: %d règle(s) exécutable(s) synchronisée(s).',
+                $auditRuleCount
+            );
+        }
+
         $runningSummary = [
             'status' => 'running',
             'mode' => $mode,
@@ -298,7 +317,8 @@ class ScanRunner
                     $classSummary['warnings'][] = $scope['warning'];
                 }
 
-                foreach ($this->checks() as $check) {
+                foreach ($configuredChecks as $configuredCheck) {
+                    $check = $configuredCheck['check'];
                     $checkName = class_basename($check);
                     $classElapsedMs = (int) round((microtime(true) - $classStartedAt) * 1000);
 
@@ -399,6 +419,12 @@ class ScanRunner
                         }
 
                         if (is_array($issue)) {
+                            $issue = $this->applyCheckSeverityPreference(
+                                $issue,
+                                (string) ($configuredCheck['issue_code'] ?? ''),
+                                $configuredCheck['severity_override'] ?? null
+                            );
+
                             $this->persistIssue($scan, $issue);
                             $this->accumulateIssueStats(
                                 $issue,
@@ -438,6 +464,210 @@ class ScanRunner
                             'message' => Str::limit($exception->getMessage(), 500),
                         ];
 
+                        $checkSummaries[$checkName]['error_count']++;
+                    } finally {
+                        $checkDurationMs = (int) round((microtime(true) - $checkStartedAt) * 1000);
+
+                        if ($maxCheckDurationMs > 0 && $checkDurationMs > $maxCheckDurationMs) {
+                            $warning = sprintf(
+                                'Le contrôle %s sur %s a pris %d ms (limite souple %d ms).',
+                                $checkName,
+                                $className,
+                                $checkDurationMs,
+                                $maxCheckDurationMs
+                            );
+                            $classSummary['warnings'][] = $warning;
+                            $scanWarnings[] = $warning;
+                        }
+
+                        Log::info('Contrôle de scan terminé', [
+                            'scan_id' => $scan->id,
+                            'connection_id' => $connection->id,
+                            'class' => $className,
+                            'check' => $checkName,
+                            'status' => $checkStatus,
+                            'issue_found' => $checkProducedIssue,
+                            'duration_ms' => $checkDurationMs,
+                            'error' => $checkError,
+                        ]);
+                    }
+                }
+
+                $classAuditRules = $auditRulesByClass[$className] ?? [];
+
+                foreach ($classAuditRules as $auditRule) {
+                    $checkName = 'ItopAuditRule['.(string) ($auditRule['rule_id'] ?? 'unknown').']';
+                    $classElapsedMs = (int) round((microtime(true) - $classStartedAt) * 1000);
+
+                    if ($maxClassDurationMs > 0 && $classElapsedMs >= $maxClassDurationMs) {
+                        $warning = sprintf(
+                            'Temps limite souple atteint pour la classe %s après %d ms, règles Audit restantes ignorées.',
+                            $className,
+                            $classElapsedMs
+                        );
+                        $classSummary['warnings'][] = $warning;
+                        $scanWarnings[] = $warning;
+                        break;
+                    }
+
+                    if (! array_key_exists($checkName, $checkSummaries)) {
+                        $checkSummaries[$checkName] = [
+                            'check' => $checkName,
+                            'applicable_count' => 0,
+                            'executed_count' => 0,
+                            'ack_skipped_count' => 0,
+                            'issues_found' => 0,
+                            'issue_codes' => [],
+                            'error_count' => 0,
+                        ];
+                    }
+
+                    $issueCode = trim((string) ($auditRule['issue_code'] ?? ''));
+                    if ($issueCode === '') {
+                        continue;
+                    }
+
+                    $rulePreference = $checkPreferenceIndex[$issueCode] ?? ['enabled' => true, 'severity_override' => null];
+                    if (($rulePreference['enabled'] ?? true) !== true) {
+                        continue;
+                    }
+
+                    if ($context->isIssueAcknowledged($className, $issueCode)) {
+                        $classSummary['checks_skipped_ack']++;
+                        $classSummary['acknowledged_issue_codes'][$issueCode] = true;
+                        $checkSummaries[$checkName]['ack_skipped_count']++;
+                        $ackSkippedCount++;
+                        continue;
+                    }
+
+                    $classSummary['checks_applicable']++;
+                    $checkSummaries[$checkName]['applicable_count']++;
+                    $checkStartedAt = microtime(true);
+                    $checkStatus = 'ok';
+                    $checkProducedIssue = false;
+                    $checkError = null;
+
+                    Log::info('Contrôle de scan démarré', [
+                        'scan_id' => $scan->id,
+                        'connection_id' => $connection->id,
+                        'class' => $className,
+                        'check' => $checkName,
+                        'class_index' => $classIndex,
+                        'classes_total' => $totalClassCount,
+                    ]);
+
+                    $this->heartbeatRunningSummary(
+                        $scan,
+                        $runningSummary,
+                        [
+                            'issue_count' => $issueCount,
+                            'total_affected' => $totalAffected,
+                            'progress.current_class' => $className,
+                            'progress.current_check' => $checkName,
+                            'resume.current_class' => $className,
+                        ],
+                        'check_started',
+                        $lastHeartbeatWriteAtMs,
+                        $heartbeatIntervalMs
+                    );
+
+                    try {
+                        $classSummary['checks_executed']++;
+                        $checkSummaries[$checkName]['executed_count']++;
+
+                        $sourceOql = trim((string) ($auditRule['oql'] ?? ''));
+                        $queryKey = $this->buildAuditRuleQueryKey(
+                            $sourceOql,
+                            $className,
+                            (string) ($scope['key'] ?? '1=1')
+                        );
+
+                        $result = $context->itopClient->countAndSample(
+                            $className,
+                            $queryKey,
+                            ['id', 'friendlyname', 'name'],
+                            $context->maxSamples,
+                            is_numeric($scope['max_records'] ?? null) ? (int) $scope['max_records'] : null
+                        );
+
+                        $affectedCount = max(0, (int) Arr::get($result, 'count', 0));
+
+                        if ($affectedCount > 0) {
+                            $suggestedOql = preg_match('/^\s*SELECT\s+/i', $queryKey) === 1
+                                ? $queryKey
+                                : sprintf('SELECT %s WHERE %s', $className, $queryKey);
+
+                            $issue = [
+                                'code' => $issueCode,
+                                'title' => sprintf(
+                                    '%s: %s',
+                                    $className,
+                                    trim((string) ($auditRule['name'] ?? ('AuditRule #'.($auditRule['rule_id'] ?? 'unknown'))))
+                                ),
+                                'domain' => 'audit',
+                                'severity' => 'warn',
+                                'impact' => 3,
+                                'affected_count' => $affectedCount,
+                                'samples' => (array) Arr::get($result, 'samples', []),
+                                'recommendation' => 'Corriger les objets non conformes selon la règle Audit iTop, ou acquitter cette règle si elle n’est pas pertinente.',
+                                'suggested_oql' => $suggestedOql,
+                                'meta' => [
+                                    'class' => $className,
+                                    'audit_rule_id' => (string) ($auditRule['rule_id'] ?? ''),
+                                    'audit_rule_name' => trim((string) ($auditRule['name'] ?? '')),
+                                    'audit_rule_status' => trim((string) ($auditRule['status'] ?? '')),
+                                    'audit_rule_target_class' => trim((string) ($auditRule['target_class'] ?? '')),
+                                    'audit_source_oql' => $sourceOql,
+                                    'delta_applied' => (bool) ($scope['delta_applied'] ?? false),
+                                    'warning' => $scope['warning'] ?? null,
+                                    'scan_cap' => $scope['max_records'] ?? null,
+                                    'itop_audit_rule' => true,
+                                ],
+                            ];
+
+                            $issue = $this->applyAcknowledgedObjectFilter(
+                                $issue,
+                                $context,
+                                $acknowledgedIssueObjects,
+                                $ackSkippedObjectsCount,
+                                $issueWarnings,
+                                $acknowledgedObjectMatchCache
+                            );
+
+                            if (is_array($issue)) {
+                                $issue = $this->applyCheckSeverityPreference(
+                                    $issue,
+                                    $issueCode,
+                                    $rulePreference['severity_override'] ?? null
+                                );
+
+                                $this->persistIssue($scan, $issue);
+                                $this->accumulateIssueStats(
+                                    $issue,
+                                    $issuesByDomain,
+                                    $issuesBySeverity,
+                                    $issuesByCode,
+                                    $topIssueRecords,
+                                    $scoreByDomain,
+                                    $issueWarnings,
+                                    $issueCount,
+                                    $totalAffected
+                                );
+
+                                $classSummary['issues_found']++;
+                                $classSummary['issue_codes'][$issueCode] = true;
+                                $checkSummaries[$checkName]['issue_codes'][$issueCode] = true;
+                                $checkSummaries[$checkName]['issues_found']++;
+                                $checkProducedIssue = true;
+                            }
+                        }
+                    } catch (Throwable $exception) {
+                        $checkStatus = 'error';
+                        $checkError = $exception->getMessage();
+                        $classSummary['errors'][] = [
+                            'check' => $checkName,
+                            'message' => Str::limit($exception->getMessage(), 500),
+                        ];
                         $checkSummaries[$checkName]['error_count']++;
                     } finally {
                         $checkDurationMs = (int) round((microtime(true) - $checkStartedAt) * 1000);
@@ -535,7 +765,10 @@ class ScanRunner
                 $ackSkippedCount,
                 $acknowledgedIssueObjectRulesCount,
                 $ackSkippedObjectsCount,
-                $forceSelectedClasses
+                $forceSelectedClasses,
+                $disabledCheckCodes,
+                $severityOverrides,
+                count($checkPreferenceIndex)
             );
             $summary['resume'] = [
                 'planned_classes' => $classNames,
@@ -680,22 +913,284 @@ class ScanRunner
         return $scan->fresh() ?? $scan;
     }
 
-    private function checks(): array
+    /**
+     * @param array<string, array{enabled: bool, severity_override: string|null}> $checkPreferenceIndex
+     * @return array<int, array{check: object, issue_code: string, severity_override: string|null}>
+     */
+    private function checks(array $checkPreferenceIndex = []): array
     {
-        return [
-            new CompletenessMandatoryEmptyCheck(),
-            new RelationsMissingExternalKeyCheck(),
-            new StalenessLastUpdateCheck(),
-            new StaleWithoutOwnerCheck(),
-            new OwnershipMissingCheck(),
-            new ClassificationMissingCheck(),
-            new OrgLocationConsistencyCheck(),
-            new StatusEmptyCheck(),
-            new NamePlaceholderCheck(),
-            new DuplicatesNameCheck(),
-            new RelationsOrphanExternalKeyCheck(),
-            new StatusObsoleteReferencedCheck(),
+        $configuredChecks = [];
+
+        foreach (CheckCatalog::definitions() as $definition) {
+            $checkClass = (string) ($definition['check_class'] ?? '');
+
+            if ($checkClass === '' || ! class_exists($checkClass)) {
+                continue;
+            }
+
+            $check = new $checkClass();
+            $issueCode = trim((string) $check->issueCode());
+
+            if ($issueCode === '') {
+                continue;
+            }
+
+            $preference = $checkPreferenceIndex[$issueCode] ?? ['enabled' => true, 'severity_override' => null];
+
+            if (($preference['enabled'] ?? true) !== true) {
+                continue;
+            }
+
+            $severityOverride = $preference['severity_override'] ?? null;
+
+            $configuredChecks[] = [
+                'check' => $check,
+                'issue_code' => $issueCode,
+                'severity_override' => is_string($severityOverride) ? strtolower(trim($severityOverride)) : null,
+            ];
+        }
+
+        return $configuredChecks;
+    }
+
+    /**
+     * @return array<string, array<int, array{
+     *   rule_id: string,
+     *   issue_code: string,
+     *   name: string,
+     *   status: string|null,
+     *   target_class: string,
+     *   oql: string,
+     *   executable: bool
+     * }>>
+     */
+    private function loadExecutableAuditRules(Connection $connection): array
+    {
+        $fallbackConfig = is_array($connection->fallback_config_json) ? $connection->fallback_config_json : [];
+        $rawRules = Arr::get($fallbackConfig, 'itop_audit_rules', []);
+
+        if (! is_array($rawRules)) {
+            return [];
+        }
+
+        $rulesByClass = [];
+
+        foreach ($rawRules as $rawRule) {
+            if (! is_array($rawRule)) {
+                continue;
+            }
+
+            $ruleId = trim((string) ($rawRule['rule_id'] ?? ''));
+            $targetClass = trim((string) ($rawRule['target_class'] ?? ''));
+            $oql = trim((string) ($rawRule['oql'] ?? ''));
+            $issueCode = trim((string) ($rawRule['issue_code'] ?? $this->auditRuleIssueCode($ruleId)));
+            $executable = (bool) ($rawRule['executable'] ?? false);
+
+            if ($ruleId === '' || $targetClass === '' || $oql === '' || $issueCode === '') {
+                continue;
+            }
+
+            if ($executable !== true) {
+                continue;
+            }
+
+            $rulesByClass[$targetClass][] = [
+                'rule_id' => $ruleId,
+                'issue_code' => $issueCode,
+                'name' => trim((string) ($rawRule['name'] ?? ('AuditRule #'.$ruleId))),
+                'status' => trim((string) ($rawRule['status'] ?? '')) ?: null,
+                'target_class' => $targetClass,
+                'oql' => $oql,
+                'executable' => true,
+            ];
+        }
+
+        foreach ($rulesByClass as $className => $rules) {
+            usort($rules, static fn (array $a, array $b): int => strcmp($a['name'], $b['name']));
+            $rulesByClass[$className] = $rules;
+        }
+
+        return $rulesByClass;
+    }
+
+    private function buildAuditRuleQueryKey(string $sourceOql, string $className, string $scopeKey): string
+    {
+        $scopeKey = trim($scopeKey) !== '' ? trim($scopeKey) : '1=1';
+        $sourceOql = trim($sourceOql);
+
+        if ($sourceOql === '') {
+            return $scopeKey;
+        }
+
+        if (preg_match('/^\s*SELECT\s+/i', $sourceOql) !== 1) {
+            return $scopeKey === '1=1'
+                ? $sourceOql
+                : sprintf('(%s) AND (%s)', $sourceOql, $scopeKey);
+        }
+
+        if ($scopeKey === '1=1') {
+            return $sourceOql;
+        }
+
+        // Keep the original OQL untouched when ORDER BY is present
+        // because injecting conditions safely would require a full parser.
+        if (preg_match('/\sORDER\s+BY\s/i', $sourceOql) === 1) {
+            return $sourceOql;
+        }
+
+        if (preg_match('/^\s*SELECT\s+([A-Za-z0-9_]+)\s+WHERE\s+(.+)$/is', $sourceOql, $matches) === 1) {
+            $selectClass = trim((string) ($matches[1] ?? ''));
+            $condition = trim((string) ($matches[2] ?? ''));
+
+            if ($selectClass === '' || strcasecmp($selectClass, $className) !== 0 || $condition === '') {
+                return $sourceOql;
+            }
+
+            return sprintf('SELECT %s WHERE (%s) AND (%s)', $className, $condition, $scopeKey);
+        }
+
+        if (preg_match('/^\s*SELECT\s+([A-Za-z0-9_]+)\s*$/i', $sourceOql, $matches) === 1) {
+            $selectClass = trim((string) ($matches[1] ?? ''));
+
+            if ($selectClass === '' || strcasecmp($selectClass, $className) !== 0) {
+                return $sourceOql;
+            }
+
+            return sprintf('SELECT %s WHERE %s', $className, $scopeKey);
+        }
+
+        return $sourceOql;
+    }
+
+    private function auditRuleIssueCode(string $ruleId): string
+    {
+        $normalized = preg_replace('/[^A-Za-z0-9]+/', '_', strtoupper(trim($ruleId))) ?? '';
+        $normalized = trim($normalized, '_');
+
+        if ($normalized === '') {
+            $normalized = 'UNKNOWN';
+        }
+
+        return 'ITOP_AUDIT_RULE_'.$normalized;
+    }
+
+    /**
+     * @return array<string, array{enabled: bool, severity_override: string|null}>
+     */
+    private function loadCheckPreferences(): array
+    {
+        if (! Schema::hasTable('scan_check_preferences')) {
+            return [];
+        }
+
+        try {
+            $rows = ScanCheckPreference::query()
+                ->get(['issue_code', 'enabled', 'severity_override']);
+        } catch (Throwable $exception) {
+            Log::warning('Impossible de charger les préférences de contrôles, valeurs par défaut appliquées.', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        $index = [];
+
+        foreach ($rows as $row) {
+            $issueCode = trim((string) $row->issue_code);
+
+            if ($issueCode === '') {
+                continue;
+            }
+
+            $severityOverride = is_string($row->severity_override)
+                ? strtolower(trim($row->severity_override))
+                : null;
+
+            if (! in_array($severityOverride, ['crit', 'warn', 'info'], true)) {
+                $severityOverride = null;
+            }
+
+            $index[$issueCode] = [
+                'enabled' => (bool) $row->enabled,
+                'severity_override' => $severityOverride,
+            ];
+        }
+
+        return $index;
+    }
+
+    /**
+     * @param array<string, array{enabled: bool, severity_override: string|null}> $checkPreferenceIndex
+     * @return array<int, string>
+     */
+    private function disabledCheckCodes(array $checkPreferenceIndex): array
+    {
+        $disabled = [];
+
+        foreach ($checkPreferenceIndex as $issueCode => $preference) {
+            if (($preference['enabled'] ?? true) === false) {
+                $disabled[] = (string) $issueCode;
+            }
+        }
+
+        sort($disabled);
+
+        return $disabled;
+    }
+
+    /**
+     * @param array<string, array{enabled: bool, severity_override: string|null}> $checkPreferenceIndex
+     * @return array<string, string>
+     */
+    private function configuredSeverityOverrides(array $checkPreferenceIndex): array
+    {
+        $overrides = [];
+
+        foreach ($checkPreferenceIndex as $issueCode => $preference) {
+            $severity = $preference['severity_override'] ?? null;
+
+            if (is_string($severity) && in_array($severity, ['crit', 'warn', 'info'], true)) {
+                $overrides[(string) $issueCode] = $severity;
+            }
+        }
+
+        ksort($overrides);
+
+        return $overrides;
+    }
+
+    /**
+     * @param array<string, mixed> $issue
+     * @return array<string, mixed>
+     */
+    private function applyCheckSeverityPreference(array $issue, string $issueCode, ?string $severityOverride): array
+    {
+        $normalizedOverride = is_string($severityOverride) ? strtolower(trim($severityOverride)) : null;
+
+        if ($normalizedOverride === null || ! in_array($normalizedOverride, ['crit', 'warn', 'info'], true)) {
+            return $issue;
+        }
+
+        if ($issueCode === '' || (string) Arr::get($issue, 'code', '') !== $issueCode) {
+            return $issue;
+        }
+
+        $currentSeverity = strtolower((string) Arr::get($issue, 'severity', 'info'));
+        if ($currentSeverity === $normalizedOverride) {
+            return $issue;
+        }
+
+        $issue['severity'] = $normalizedOverride;
+        $meta = Arr::get($issue, 'meta', []);
+        $meta = is_array($meta) ? $meta : [];
+        $meta['severity_override'] = [
+            'from' => $currentSeverity,
+            'to' => $normalizedOverride,
         ];
+        $issue['meta'] = $meta;
+
+        return $issue;
     }
 
     private function buildSummary(
@@ -717,6 +1212,9 @@ class ScanRunner
         int $activeAcknowledgeObjectRules = 0,
         int $ackSkippedObjectsCount = 0,
         bool $forceSelectedClasses = false,
+        array $disabledCheckCodes = [],
+        array $severityOverrides = [],
+        int $configuredCheckPreferenceCount = 0,
     ): array {
         foreach ($checkSummaries as $checkName => $checkSummary) {
             $checkSummaries[$checkName]['issue_codes'] = array_values(array_keys((array) Arr::get($checkSummary, 'issue_codes', [])));
@@ -754,6 +1252,11 @@ class ScanRunner
                 'active_object_rules' => $activeAcknowledgeObjectRules,
                 'skipped_objects' => $ackSkippedObjectsCount,
                 'force_selected_classes' => $forceSelectedClasses,
+            ],
+            'check_preferences' => [
+                'configured_rules' => $configuredCheckPreferenceCount,
+                'disabled_issue_codes' => array_values(array_unique($disabledCheckCodes)),
+                'severity_overrides' => $severityOverrides,
             ],
             'warnings' => array_values(array_unique(array_merge($issueWarnings, $scanWarnings))),
         ];

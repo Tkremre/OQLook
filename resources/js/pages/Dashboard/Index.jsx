@@ -8,6 +8,7 @@ import { Link, router, useForm } from '@inertiajs/react';
 import { appPath } from '../../lib/app-path';
 import { useI18n } from '../../i18n';
 import {
+  BadgeCheck,
   BarChart3,
   CheckCircle2,
   CircleAlert,
@@ -62,6 +63,7 @@ export default function DashboardIndex({
   latestIssues = [],
   recentScans = [],
   classCatalogByConnection = {},
+  auditRulesByConnection = {},
 }) {
   const { t } = useI18n();
   const [selectedConnection, setSelectedConnection] = useState(selectedConnectionId ?? connections[0]?.id ?? null);
@@ -82,6 +84,12 @@ export default function DashboardIndex({
     running: false,
     updatedAt: null,
   });
+  const [auditRuleState, setAuditRuleState] = useState(auditRulesByConnection);
+  const [auditSyncState, setAuditSyncState] = useState({
+    syncing: false,
+    error: null,
+  });
+  const [auditAckBusy, setAuditAckBusy] = useState({});
 
   const form = useForm({
     mode: 'full',
@@ -108,6 +116,14 @@ export default function DashboardIndex({
   const discoveredClasses = useMemo(() => {
     return classCatalogByConnection[String(selectedConnection)] ?? [];
   }, [classCatalogByConnection, selectedConnection]);
+
+  const selectedAuditRulesPayload = useMemo(() => {
+    return auditRuleState[String(selectedConnection)] ?? { rules: [], synced_at: null };
+  }, [auditRuleState, selectedConnection]);
+
+  const selectedAuditRules = useMemo(() => (
+    Array.isArray(selectedAuditRulesPayload?.rules) ? selectedAuditRulesPayload.rules : []
+  ), [selectedAuditRulesPayload]);
 
   const filteredDiscoveredClasses = useMemo(() => {
     if (!catalogSearch) return discoveredClasses;
@@ -148,6 +164,91 @@ export default function DashboardIndex({
 
   const clearSelectedClasses = () => {
     form.setData('classes', '');
+  };
+
+  const syncAuditRules = async () => {
+    if (!selectedConnection) return;
+
+    setAuditSyncState({ syncing: true, error: null });
+
+    try {
+      const response = await window.axios.post(
+        appPath(`connections/${selectedConnection}/audit-rules/sync`),
+        {},
+        { headers: { Accept: 'application/json' } },
+      );
+
+      const syncedRules = Array.isArray(response?.data?.rules) ? response.data.rules : [];
+      setAuditRuleState((previous) => ({
+        ...previous,
+        [String(selectedConnection)]: {
+          rules: syncedRules,
+          synced_at: new Date().toISOString(),
+        },
+      }));
+      setAuditSyncState({ syncing: false, error: null });
+    } catch (error) {
+      setAuditSyncState({
+        syncing: false,
+        error: error?.response?.data?.status ?? error?.message ?? 'Erreur de synchronisation Audit iTop',
+      });
+    }
+  };
+
+  const toggleAuditRuleAcknowledge = async (rule) => {
+    if (!selectedConnection || !rule?.rule_id || !rule?.target_class) return;
+
+    const key = `${selectedConnection}:${rule.rule_id}`;
+    setAuditAckBusy((previous) => ({ ...previous, [key]: true }));
+
+    try {
+      if (rule.acknowledged) {
+        await window.axios.delete(
+          appPath(`connections/${selectedConnection}/audit-rules/acknowledge`),
+          {
+            data: {
+              rule_id: rule.rule_id,
+              target_class: rule.target_class,
+            },
+            headers: { Accept: 'application/json' },
+          },
+        );
+      } else {
+        await window.axios.post(
+          appPath(`connections/${selectedConnection}/audit-rules/acknowledge`),
+          {
+            rule_id: rule.rule_id,
+            target_class: rule.target_class,
+            name: rule.name,
+          },
+          { headers: { Accept: 'application/json' } },
+        );
+      }
+
+      setAuditRuleState((previous) => {
+        const current = previous[String(selectedConnection)] ?? { rules: [], synced_at: null };
+        const currentRules = Array.isArray(current.rules) ? current.rules : [];
+
+        return {
+          ...previous,
+          [String(selectedConnection)]: {
+            ...current,
+            rules: currentRules.map((candidate) => (
+              candidate.rule_id === rule.rule_id && candidate.target_class === rule.target_class
+                ? { ...candidate, acknowledged: !rule.acknowledged }
+                : candidate
+            )),
+          },
+        };
+      });
+    } catch (error) {
+      setAuditSyncState((previous) => ({
+        ...previous,
+        error: error?.response?.data?.status ?? error?.message ?? 'Erreur acquittement règle Audit',
+      }));
+    } finally {
+      setAuditAckBusy((previous) => ({ ...previous, [key]: false }));
+    }
   };
 
   const submitScan = (event) => {
@@ -242,6 +343,10 @@ export default function DashboardIndex({
 
   const scoreDomains = latestScan?.scores_json?.domains ?? {};
   const exportBasePath = latestScan ? appPath(`scans/${latestScan.id}/export`) : '#';
+
+  useEffect(() => {
+    setAuditRuleState(auditRulesByConnection);
+  }, [auditRulesByConnection]);
 
   useEffect(() => {
     const fallbackConnectionId = connections[0]?.id ?? null;
@@ -601,6 +706,71 @@ export default function DashboardIndex({
                   </div>
                 </>
               ) : null}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <BadgeCheck className="h-3.5 w-3.5 text-teal-700" />
+                  Règles Audit iTop
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={syncAuditRules}
+                  disabled={!selectedConnection || auditSyncState.syncing}
+                >
+                  {auditSyncState.syncing ? 'Synchronisation...' : 'Synchroniser'}
+                </Button>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Une règle acquittée est ignorée pendant les scans.
+              </p>
+              {selectedAuditRulesPayload?.synced_at ? (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Dernière synchro: {new Date(selectedAuditRulesPayload.synced_at).toLocaleString()}
+                </p>
+              ) : null}
+              {auditSyncState.error ? (
+                <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+                  {auditSyncState.error}
+                </p>
+              ) : null}
+              <div className="mt-2 max-h-44 space-y-2 overflow-auto">
+                {selectedAuditRules.length === 0 ? (
+                  <p className="text-xs text-slate-500">Aucune règle Audit synchronisée.</p>
+                ) : selectedAuditRules.map((rule) => {
+                  const busyKey = `${selectedConnection}:${rule.rule_id}`;
+                  const isBusy = Boolean(auditAckBusy[busyKey]);
+                  return (
+                    <div key={`${rule.rule_id}:${rule.target_class}`} className="rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-800">{rule.name}</p>
+                          <p className="truncate text-[11px] text-slate-500">
+                            {rule.rule_id} | {rule.target_class ?? 'classe inconnue'}
+                          </p>
+                          {rule.executable ? null : (
+                            <p className="mt-0.5 text-[11px] text-amber-700">Règle non exécutable automatiquement</p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant={rule.acknowledged ? 'outline' : 'secondary'}
+                          disabled={isBusy || !rule.target_class}
+                          onClick={() => void toggleAuditRuleAcknowledge(rule)}
+                        >
+                          {isBusy
+                            ? '...'
+                            : rule.acknowledged
+                              ? 'Désacquitter'
+                              : 'Acquitter'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <details className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">

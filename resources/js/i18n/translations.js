@@ -31,7 +31,7 @@ export const TRANSLATIONS = {
       },
       settings: {
         title: 'Paramètres',
-        subtitle: 'Langue de l\'interface et guide d\'utilisation',
+        subtitle: 'Langue, interface et règles de conformité',
       },
     },
     common: {
@@ -49,6 +49,17 @@ export const TRANSLATIONS = {
     settings: {
       languageCardTitle: 'Langue de l\'interface',
       languageCardDescription: 'Choisissez le pack de langue de l\'application',
+      complianceCardTitle: 'Règles de conformité',
+      complianceCardDescription: 'Activez/désactivez les contrôles et ajustez leur sévérité',
+      complianceEnabled: 'Actif',
+      complianceDefaultSeverity: 'Sévérité par défaut',
+      complianceSeverityOverride: 'Override de sévérité',
+      complianceSeverityDefault: 'Par défaut',
+      complianceSave: 'Enregistrer les règles',
+      complianceSaving: 'Enregistrement...',
+      complianceReset: 'Réinitialiser',
+      complianceActiveRules: 'Règles actives: {count}',
+      complianceOverrides: 'Overrides: {count}',
       languageLabel: 'Langue',
       languageHint: 'Préférence enregistrée dans ce navigateur.',
       uiCardTitle: 'Affichage et disposition',
@@ -128,7 +139,7 @@ export const TRANSLATIONS = {
       },
       settings: {
         title: 'Settings',
-        subtitle: 'UI language and usage guide',
+        subtitle: 'Language, interface and compliance rules',
       },
     },
     common: {
@@ -146,6 +157,17 @@ export const TRANSLATIONS = {
     settings: {
       languageCardTitle: 'Interface language',
       languageCardDescription: 'Choose the application language pack',
+      complianceCardTitle: 'Compliance rules',
+      complianceCardDescription: 'Enable/disable checks and tune their severity',
+      complianceEnabled: 'Enabled',
+      complianceDefaultSeverity: 'Default severity',
+      complianceSeverityOverride: 'Severity override',
+      complianceSeverityDefault: 'Default',
+      complianceSave: 'Save rules',
+      complianceSaving: 'Saving...',
+      complianceReset: 'Reset',
+      complianceActiveRules: 'Active rules: {count}',
+      complianceOverrides: 'Overrides: {count}',
       languageLabel: 'Language',
       languageHint: 'Preference is saved in this browser.',
       uiCardTitle: 'Display and layout',

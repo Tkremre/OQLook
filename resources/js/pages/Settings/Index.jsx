@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useForm } from '@inertiajs/react';
 import AppLayout from '../../layouts/AppLayout';
 import { Card, CardDescription, CardTitle } from '../../components/ui/card';
 import { Select } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
-import { BookOpenText, Languages, LayoutPanelTop, ScrollText } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { BookOpenText, Languages, LayoutPanelTop, ScrollText, ShieldCheck } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { useUiPrefs } from '../../ui-prefs';
+import { appPath } from '../../lib/app-path';
 
 function formatSize(sizeBytes) {
   const size = Number(sizeBytes || 0);
@@ -14,10 +17,28 @@ function formatSize(sizeBytes) {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function SettingsIndex({ readmes = [] }) {
+function normalizeCheckRules(checkRules) {
+  return (Array.isArray(checkRules) ? checkRules : []).map((rule) => ({
+    issue_code: String(rule?.issue_code ?? ''),
+    check_class: String(rule?.check_class ?? ''),
+    domain: String(rule?.domain ?? ''),
+    default_severity: String(rule?.default_severity ?? 'info'),
+    enabled: Boolean(rule?.enabled ?? true),
+    severity_override: rule?.severity_override ? String(rule.severity_override) : '',
+    title_fr: String(rule?.title_fr ?? rule?.issue_code ?? ''),
+    title_en: String(rule?.title_en ?? rule?.issue_code ?? ''),
+    description_fr: String(rule?.description_fr ?? ''),
+    description_en: String(rule?.description_en ?? ''),
+  }));
+}
+
+export default function SettingsIndex({ readmes = [], checkRules = [] }) {
   const { locale, setLocale, t } = useI18n();
   const { prefs, setTheme, setLayout, setDensity, setSidebarCollapsed } = useUiPrefs();
   const [activeReadmeId, setActiveReadmeId] = useState(readmes[0]?.id ?? null);
+  const rulesForm = useForm({
+    rules: normalizeCheckRules(checkRules),
+  });
 
   const activeReadme = useMemo(() => {
     if (readmes.length === 0) return null;
@@ -43,6 +64,49 @@ export default function SettingsIndex({ readmes = [] }) {
   const densityLabelMap = {
     comfortable: t('settings.densityComfortable'),
     compact: t('settings.densityCompact'),
+  };
+
+  useEffect(() => {
+    rulesForm.setData('rules', normalizeCheckRules(checkRules));
+  }, [checkRules]);
+
+  const activeRulesCount = useMemo(() => (
+    rulesForm.data.rules.filter((rule) => rule.enabled).length
+  ), [rulesForm.data.rules]);
+
+  const overrideCount = useMemo(() => (
+    rulesForm.data.rules.filter((rule) => Boolean(rule.severity_override)).length
+  ), [rulesForm.data.rules]);
+
+  const updateRule = (issueCode, patch) => {
+    rulesForm.setData(
+      'rules',
+      rulesForm.data.rules.map((rule) => (
+        rule.issue_code === issueCode
+          ? { ...rule, ...patch }
+          : rule
+      )),
+    );
+  };
+
+  const resetRules = () => {
+    rulesForm.setData('rules', normalizeCheckRules(checkRules));
+  };
+
+  const submitRules = (event) => {
+    event.preventDefault();
+
+    rulesForm
+      .transform((data) => ({
+        rules: (data.rules ?? []).map((rule) => ({
+          issue_code: rule.issue_code,
+          enabled: Boolean(rule.enabled),
+          severity_override: rule.severity_override || null,
+        })),
+      }))
+      .post(appPath('settings/check-preferences'), {
+        preserveScroll: true,
+      });
   };
 
   return (
@@ -120,6 +184,91 @@ export default function SettingsIndex({ readmes = [] }) {
                 </Select>
               </div>
             </div>
+          </Card>
+
+          <Card className="oq-appear h-fit p-4 sm:p-5">
+            <CardTitle className="inline-flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-teal-700" />
+              {t('settings.complianceCardTitle')}
+            </CardTitle>
+            <CardDescription>{t('settings.complianceCardDescription')}</CardDescription>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Badge tone="info" className="normal-case">{t('settings.complianceActiveRules', { count: activeRulesCount })}</Badge>
+              <Badge tone="slate" className="normal-case">{t('settings.complianceOverrides', { count: overrideCount })}</Badge>
+            </div>
+
+            <form className="mt-3 space-y-3" onSubmit={submitRules}>
+              <div className="max-h-[52vh] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <div className="space-y-2">
+                  {rulesForm.data.rules.map((rule) => {
+                    const ruleTitle = locale === 'en' ? rule.title_en : rule.title_fr;
+                    const ruleDescription = locale === 'en' ? rule.description_en : rule.description_fr;
+
+                    return (
+                      <div key={rule.issue_code} className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{ruleTitle}</p>
+                            <p className="text-[11px] text-slate-500">
+                              {rule.issue_code} | {rule.domain}
+                            </p>
+                            {ruleDescription ? (
+                              <p className="mt-1 text-[11px] text-slate-600">{ruleDescription}</p>
+                            ) : null}
+                          </div>
+                          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(rule.enabled)}
+                              onChange={(event) => updateRule(rule.issue_code, { enabled: event.target.checked })}
+                            />
+                            {t('settings.complianceEnabled')}
+                          </label>
+                        </div>
+
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600">
+                              {t('settings.complianceDefaultSeverity')}
+                            </label>
+                            <p className="mt-1 text-xs text-slate-700">{rule.default_severity}</p>
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600">
+                              {t('settings.complianceSeverityOverride')}
+                            </label>
+                            <Select
+                              className="mt-1"
+                              value={rule.severity_override || ''}
+                              onChange={(event) => updateRule(rule.issue_code, { severity_override: event.target.value })}
+                            >
+                              <option value="">{t('settings.complianceSeverityDefault')}</option>
+                              <option value="crit">crit</option>
+                              <option value="warn">warn</option>
+                              <option value="info">info</option>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetRules}
+                  disabled={rulesForm.processing}
+                >
+                  {t('settings.complianceReset')}
+                </Button>
+                <Button type="submit" disabled={rulesForm.processing}>
+                  {rulesForm.processing ? t('settings.complianceSaving') : t('settings.complianceSave')}
+                </Button>
+              </div>
+            </form>
           </Card>
         </div>
 

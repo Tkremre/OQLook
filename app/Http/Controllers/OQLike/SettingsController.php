@@ -53,10 +53,7 @@ class SettingsController extends Controller
                 'title' => (string) ($entry['title'] ?? basename($path)),
                 'relative_path' => str_replace('\\', '/', ltrim(str_replace(base_path(), '', $path), DIRECTORY_SEPARATOR)),
                 'content' => $content,
-                'content_html' => Str::markdown($content, [
-                    'html_input' => 'strip',
-                    'allow_unsafe_links' => false,
-                ]),
+                'content_html' => $this->renderReadmeHtml($content),
                 'updated_at' => date('Y-m-d H:i:s', (int) @filemtime($path)),
                 'size_bytes' => (int) @filesize($path),
             ];
@@ -170,5 +167,116 @@ class SettingsController extends Controller
             'Règles de conformité mises à jour (%d règle(s) personnalisée(s)).',
             $customizedCount
         ));
+    }
+
+    private function renderReadmeHtml(string $markdown): string
+    {
+        $html = Str::markdown($markdown, [
+            'html_input' => 'strip',
+            'allow_unsafe_links' => false,
+        ]);
+
+        return $this->injectHeadingAnchors($html);
+    }
+
+    private function injectHeadingAnchors(string $html): string
+    {
+        $trimmed = trim($html);
+
+        if ($trimmed === '' || ! class_exists(\DOMDocument::class)) {
+            return $html;
+        }
+
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $wrapped = '<div id="oq-readme-root">'.$trimmed.'</div>';
+        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>'.$wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+        if (! $loaded) {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+
+            return $html;
+        }
+
+        $usedIds = [];
+        $xpath = new \DOMXPath($dom);
+
+        foreach ($xpath->query('//h1|//h2|//h3|//h4|//h5|//h6') as $headingNode) {
+            if (! $headingNode instanceof \DOMElement) {
+                continue;
+            }
+
+            $existingId = trim((string) $headingNode->getAttribute('id'));
+            if ($existingId !== '') {
+                $usedIds[$existingId] = true;
+                continue;
+            }
+
+            $headingText = trim((string) $headingNode->textContent);
+            $baseSlug = Str::slug($headingText, '-');
+            if ($baseSlug === '') {
+                $baseSlug = 'section';
+            }
+
+            $slug = $baseSlug;
+            $suffix = 2;
+            while (isset($usedIds[$slug])) {
+                $slug = $baseSlug.'-'.$suffix;
+                $suffix++;
+            }
+
+            $headingNode->setAttribute('id', $slug);
+            $usedIds[$slug] = true;
+        }
+
+        foreach ($xpath->query('//a[@href]') as $anchorNode) {
+            if (! $anchorNode instanceof \DOMElement) {
+                continue;
+            }
+
+            $href = trim((string) $anchorNode->getAttribute('href'));
+            if ($href === '' || preg_match('/^(https?:|mailto:|tel:)/i', $href) === 1) {
+                continue;
+            }
+
+            $fragment = parse_url($href, PHP_URL_FRAGMENT);
+            if (! is_string($fragment) || $fragment === '') {
+                continue;
+            }
+
+            $decodedFragment = trim(rawurldecode($fragment));
+            if ($decodedFragment === '') {
+                continue;
+            }
+
+            if (isset($usedIds[$decodedFragment])) {
+                $anchorNode->setAttribute('href', '#'.$decodedFragment);
+                continue;
+            }
+
+            $slugCandidate = Str::slug($decodedFragment, '-');
+            if ($slugCandidate !== '' && isset($usedIds[$slugCandidate])) {
+                $anchorNode->setAttribute('href', '#'.$slugCandidate);
+            }
+        }
+
+        $root = $dom->getElementById('oq-readme-root');
+        if (! $root instanceof \DOMElement) {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+
+            return $html;
+        }
+
+        $result = '';
+        foreach ($root->childNodes as $childNode) {
+            $result .= (string) $dom->saveHTML($childNode);
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousUseInternalErrors);
+
+        return $result !== '' ? $result : $html;
     }
 }

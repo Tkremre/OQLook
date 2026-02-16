@@ -641,6 +641,11 @@ h4 {
   font-family: var(--font-display);
   line-height: 1.25;
   color: inherit;
+  scroll-margin-top: 0.75rem;
+}
+
+.oq-readme-scroll {
+  scrollbar-gutter: stable both-edges;
 }
 
 .oq-about-modal {

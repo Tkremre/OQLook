@@ -4,52 +4,55 @@
 
 # OQLook Connector (Standalone PHP)
 
-EN: Deploy this connector close to iTop to expose fast/stable metamodel endpoints for OQLook.
+---
 
-FR: Déployez ce connecteur au plus près d'iTop pour exposer des endpoints métamodèle rapides/stables vers OQLook.
+## Table of Contents
+
+- [🇬🇧 English](#-english)
+- [🇫🇷 Français](#-français)
 
 ---
 
-## Table of Contents / Sommaire
+## 🇬🇧 English
 
-- [Overview / Présentation](#overview--présentation)
-- [Endpoints](#endpoints)
-- [Installation](#installation)
-- [Security / Sécurité](#security--sécurité)
-- [Smoke tests](#smoke-tests)
-- [OQLook configuration](#oqlook-configuration)
-- [Performance notes](#performance-notes)
+> [!NOTE]
+> English section for connector deployment and operations.
 
-## Overview / Présentation
+### Why This Connector Exists
 
-Use this connector when:
+Use the connector when direct iTop REST discovery is too slow, unstable, or limited for large CMDBs.
 
-- iTop REST discovery is too slow or limited.
-- You want class/attribute discovery executed server-side near iTop.
+Connector value:
 
-Utilisez ce connecteur si :
+- faster metamodel extraction near iTop,
+- safer and more predictable payloads,
+- reduced latency between iTop internals and discovery logic.
 
-- la découverte REST iTop est trop lente ou limitée,
-- vous voulez exécuter la découverte classes/attributs côté serveur iTop.
-
-## Endpoints
+### Endpoints
 
 - `GET /ping`
 - `GET /classes?filter=persistent`
 - `GET /class/{ClassName}`
 - `GET /class/{ClassName}/relations`
 
-## Installation
+### Deployment Pattern (Recommended)
 
-1. Copy this connector folder to the iTop host.
+1. Deploy connector on the same network segment as iTop.
+2. Protect it with HTTPS.
+3. Protect access with bearer token.
+4. Configure OQLook to use the connector URL.
+
+### Installation
+
+1. Copy connector folder to iTop host.
 2. Copy `config.sample.php` to `config.php`.
 3. Edit `config.php`:
    - `bearer_token`
    - `itop_bootstrap` absolute path to `.../application/startup.inc.php`
-   - optional runtime limits (`max_execution_seconds`, memory guard)
-4. Expose `public/` through Nginx or Apache.
+   - runtime limits (`max_execution_seconds`, memory guard ratios) if needed.
+4. Expose `public/` with Nginx or Apache.
 
-### Apache example
+#### Apache example
 
 ```apache
 Alias /oqlike-connector "/var/www/oqlike-connector/public"
@@ -62,7 +65,7 @@ Alias /oqlike-connector "/var/www/oqlike-connector/public"
 SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 ```
 
-### Nginx example
+#### Nginx example
 
 ```nginx
 location /oqlike-connector/ {
@@ -79,14 +82,15 @@ location ~ ^/oqlike-connector/(.+\.php)$ {
 }
 ```
 
-## Security / Sécurité
+### Security Checklist
 
 - Required header: `Authorization: Bearer <token>`
-- Invalid/missing token returns `401`
+- Missing/invalid token returns `401`
 - Restrict CORS (`cors_allowed_origins`)
-- Use HTTPS in production
+- Use HTTPS only in production
+- Keep `config.php` out of version control
 
-## Smoke tests
+### Smoke Tests
 
 ```bash
 curl -k -H "Authorization: Bearer <TOKEN>" "https://<host>/oqlike-connector/ping"
@@ -99,19 +103,152 @@ Expected `/ping`:
 - `ok: true`
 - `metamodel_available: true`
 
-## OQLook configuration
+### Connect OQLook to Connector
 
 In OQLook connection settings:
 
 - Connector URL: `https://<host>/oqlike-connector`
 - Bearer token: same value as `config.php`
 
-## Performance notes
+Then run discovery from UI or CLI:
 
-- Connector payload can be large on big CMDBs.
-- Tune OQLook limits first:
+```bash
+php artisan oqlike:discover <connection_id>
+```
+
+### Performance Tips
+
+- Large CMDBs can produce heavy payloads.
+- Tune OQLook first:
   - `OQLIKE_MAX_CONNECTOR_CLASSES`
   - `OQLIKE_CONNECTOR_MEMORY_GUARD_RATIO`
   - `OQLIKE_CONNECTOR_MEMORY_HARD_STOP_RATIO`
   - `OQLIKE_DISCOVERY_SCAN_LIMIT`
-- Keep low latency between OQLook app and connector host.
+
+### Common Issues
+
+- `Connection refused`: network path/firewall/reverse proxy issue.
+- `401 unauthorized`: token mismatch.
+- timeouts: increase runtime and review class cap.
+- partial class list: inspect connector logs and memory guard settings.
+
+---
+
+## 🇫🇷 Français
+
+> [!TIP]
+> Section française pour le déploiement et l'exploitation du connecteur.
+
+### Pourquoi Ce Connecteur Existe
+
+Utilise le connecteur quand la découverte REST iTop directe est trop lente, instable ou limitée sur de grosses CMDB.
+
+Ce qu'il apporte:
+
+- extraction métamodèle plus rapide au plus près d'iTop,
+- payloads plus stables/prévisibles,
+- latence réduite entre iTop et la logique de découverte.
+
+### Endpoints
+
+- `GET /ping`
+- `GET /classes?filter=persistent`
+- `GET /class/{ClassName}`
+- `GET /class/{ClassName}/relations`
+
+### Pattern de Déploiement (Recommandé)
+
+1. Déployer le connecteur sur le même segment réseau qu'iTop.
+2. Le protéger en HTTPS.
+3. Contrôler l'accès via bearer token.
+4. Configurer OQLook avec l'URL du connecteur.
+
+### Installation
+
+1. Copier le dossier connecteur sur l'hôte iTop.
+2. Copier `config.sample.php` vers `config.php`.
+3. Modifier `config.php`:
+   - `bearer_token`
+   - chemin absolu `itop_bootstrap` vers `.../application/startup.inc.php`
+   - limites runtime (`max_execution_seconds`, ratios garde mémoire) si besoin.
+4. Exposer `public/` via Nginx ou Apache.
+
+#### Exemple Apache
+
+```apache
+Alias /oqlike-connector "/var/www/oqlike-connector/public"
+<Directory "/var/www/oqlike-connector/public">
+    AllowOverride All
+    Require all granted
+</Directory>
+
+# Si Authorization n'est pas transmise:
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+```
+
+#### Exemple Nginx
+
+```nginx
+location /oqlike-connector/ {
+    alias /var/www/oqlike-connector/public/;
+    index index.php;
+    try_files $uri $uri/ /index.php?$query_string;
+}
+
+location ~ ^/oqlike-connector/(.+\.php)$ {
+    alias /var/www/oqlike-connector/public/$1;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME /var/www/oqlike-connector/public/$1;
+    fastcgi_pass unix:/run/php/php-fpm.sock;
+}
+```
+
+### Checklist Sécurité
+
+- Header requis: `Authorization: Bearer <token>`
+- Token invalide/absent: `401`
+- Restreindre CORS (`cors_allowed_origins`)
+- HTTPS uniquement en production
+- Garder `config.php` hors versioning
+
+### Smoke Tests
+
+```bash
+curl -k -H "Authorization: Bearer <TOKEN>" "https://<host>/oqlike-connector/ping"
+curl -k -H "Authorization: Bearer <TOKEN>" "https://<host>/oqlike-connector/classes?filter=persistent"
+curl -k -H "Authorization: Bearer <TOKEN>" "https://<host>/oqlike-connector/classes?filter=persistent&include_hash=0"
+```
+
+Attendu sur `/ping`:
+
+- `ok: true`
+- `metamodel_available: true`
+
+### Connecter OQLook Au Connecteur
+
+Dans les paramètres de connexion OQLook:
+
+- URL du connecteur: `https://<host>/oqlike-connector`
+- Bearer token: même valeur que dans `config.php`
+
+Puis lancer la découverte (UI ou CLI):
+
+```bash
+php artisan oqlike:discover <connection_id>
+```
+
+### Conseils Performance
+
+- Les grosses CMDB peuvent générer des payloads lourds.
+- Ajuster d'abord OQLook:
+  - `OQLIKE_MAX_CONNECTOR_CLASSES`
+  - `OQLIKE_CONNECTOR_MEMORY_GUARD_RATIO`
+  - `OQLIKE_CONNECTOR_MEMORY_HARD_STOP_RATIO`
+  - `OQLIKE_DISCOVERY_SCAN_LIMIT`
+
+### Problèmes Fréquents
+
+- `Connection refused`: souci réseau/firewall/reverse proxy.
+- `401 unauthorized`: token incorrect.
+- timeouts: augmenter les limites runtime et revoir les caps classes.
+- liste classes incomplète: vérifier logs connecteur + garde mémoire.

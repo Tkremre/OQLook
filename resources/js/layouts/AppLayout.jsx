@@ -182,7 +182,7 @@ export default function AppLayout({ children, title, subtitle, fullWidth = true 
 
   const useFullLayout = fullWidth && prefs.layout === 'full';
   const shellClass = useFullLayout
-    ? 'mx-auto w-full max-w-[1720px] px-4 pb-8 pt-5 sm:px-6 lg:px-8'
+    ? 'mx-auto w-full max-w-none px-4 pb-8 pt-5 sm:px-6 lg:px-8'
     : 'mx-auto w-full max-w-7xl px-4 pb-8 pt-5 sm:px-6 lg:px-8';
 
   const sidebarWidthClass = sidebarCollapsed ? 'lg:w-[92px]' : 'lg:w-[250px]';

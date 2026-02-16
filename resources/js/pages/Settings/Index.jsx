@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import AppLayout from '../../layouts/AppLayout';
 import { Card, CardDescription, CardTitle } from '../../components/ui/card';
@@ -36,6 +36,7 @@ export default function SettingsIndex({ readmes = [], checkRules = [] }) {
   const { locale, setLocale, t } = useI18n();
   const { prefs, setTheme, setLayout, setDensity, setSidebarCollapsed } = useUiPrefs();
   const [activeReadmeId, setActiveReadmeId] = useState(readmes[0]?.id ?? null);
+  const readmeContentRef = useRef(null);
   const rulesForm = useForm({
     rules: normalizeCheckRules(checkRules),
   });
@@ -107,6 +108,40 @@ export default function SettingsIndex({ readmes = [], checkRules = [] }) {
       .post(appPath('settings/check-preferences'), {
         preserveScroll: true,
       });
+  };
+
+  const handleReadmeAnchorClick = (event) => {
+    const container = readmeContentRef.current;
+    if (!container) return;
+
+    const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!anchor) return;
+
+    const rawHref = String(anchor.getAttribute('href') ?? '').trim();
+    if (!rawHref || /^(https?:|mailto:|tel:)/i.test(rawHref)) return;
+
+    const hashIndex = rawHref.indexOf('#');
+    if (hashIndex < 0) return;
+
+    const rawFragment = rawHref.slice(hashIndex + 1).trim();
+    if (!rawFragment) return;
+
+    let decodedFragment = rawFragment;
+    try {
+      decodedFragment = decodeURIComponent(rawFragment);
+    } catch {
+      decodedFragment = rawFragment;
+    }
+    const escapedFragment = window.CSS?.escape ? window.CSS.escape(decodedFragment) : decodedFragment;
+    const target = container.querySelector(`#${escapedFragment}`);
+
+    if (!target) return;
+
+    event.preventDefault();
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.history?.replaceState) {
+      window.history.replaceState(null, '', `#${encodeURIComponent(decodedFragment)}`);
+    }
   };
 
   return (
@@ -272,7 +307,7 @@ export default function SettingsIndex({ readmes = [], checkRules = [] }) {
           </Card>
         </div>
 
-        <Card className="oq-appear p-4 sm:p-5">
+        <Card className="oq-appear p-4 sm:p-5 xl:flex xl:h-[calc(100dvh-7.5rem)] xl:flex-col">
           <CardTitle className="inline-flex items-center gap-2">
             <BookOpenText className="h-5 w-5 text-teal-700" />
             {t('settings.readmeCardTitle')}
@@ -301,7 +336,7 @@ export default function SettingsIndex({ readmes = [], checkRules = [] }) {
               </div>
 
               {activeReadme ? (
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-800">
                       <ScrollText className="h-4 w-4 text-slate-500" />
@@ -315,11 +350,16 @@ export default function SettingsIndex({ readmes = [], checkRules = [] }) {
                   </div>
                   {activeReadme.content_html ? (
                     <div
-                      className="oq-readme-html mt-3 max-h-[52vh] overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs"
+                      ref={readmeContentRef}
+                      onClick={handleReadmeAnchorClick}
+                      className="oq-readme-html oq-readme-scroll mt-3 max-h-[52vh] overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs xl:max-h-none xl:min-h-0 xl:flex-1"
                       dangerouslySetInnerHTML={{ __html: activeReadme.content_html }}
                     />
                   ) : (
-                    <pre className="mt-3 max-h-[52vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs sm:whitespace-pre">
+                    <pre
+                      ref={readmeContentRef}
+                      className="oq-readme-scroll mt-3 max-h-[52vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-800 sm:max-h-[68vh] sm:text-xs sm:whitespace-pre xl:max-h-none xl:min-h-0 xl:flex-1"
+                    >
                       {activeReadme.content}
                     </pre>
                   )}
